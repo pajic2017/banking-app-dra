@@ -5,6 +5,22 @@ spring:
     name: account-service
   config:
     import: "${CONFIG_IMPORT:configserver:${CONFIG_SERVER_URL:http://localhost:8888}}"
+  datasource:
+    url: ${ACCOUNT_DB_URL:jdbc:mysql://localhost:3308/accounts?connectionTimeZone=UTC}
+    username: ${ACCOUNT_DB_USER:account}
+    password: ${ACCOUNT_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+bank:
+  customer-service-url: ${CUSTOMER_SERVICE_URL:http://localhost:8082}
 management:
   endpoints:
     web:

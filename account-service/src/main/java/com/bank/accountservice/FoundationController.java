@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Infrastructure probe only; business APIs are implemented in later phases. */
 @RestController
 public class FoundationController {
-    @GetMapping("/foundation")
+    @GetMapping({"/foundation", "/accounts/foundation"})
     public Map<String, String> foundation() {
         return Map.of("service", "account-service", "phase", "foundation");
     }

@@ -19,6 +19,8 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+bank:
+  account-service-url: ${ACCOUNT_SERVICE_URL:http://localhost:8083}
 management:
   endpoints:
     web:

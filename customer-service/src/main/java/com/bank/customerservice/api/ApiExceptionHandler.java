@@ -1,6 +1,7 @@
 package com.bank.customerservice.api;
 
 import com.bank.customerservice.service.CustomerNotFoundException;
+import com.bank.customerservice.service.AccountOverviewUnavailable;
 import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,6 +17,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(CustomerNotFoundException.class)
     ProblemDetail missing(CustomerNotFoundException error) {
         return problem(HttpStatus.NOT_FOUND, "Customer not found", error.getMessage());
+    }
+
+    @ExceptionHandler(AccountOverviewUnavailable.class)
+    ProblemDetail overviewUnavailable(AccountOverviewUnavailable error) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE,"Account overview unavailable",error.getMessage());
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

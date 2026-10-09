@@ -97,6 +97,7 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     environment:
+      ACCOUNT_SERVICE_URL: http://account-service:8083
       CUSTOMER_DB_URL: jdbc:mysql://customer-db:3306/customers?connectionTimeZone=UTC
       CUSTOMER_DB_USER: customer
       CUSTOMER_DB_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Generate .env first}
@@ -125,9 +126,17 @@ services:
     ports:
       - "127.0.0.1:8083:8083"
     environment:
+      ACCOUNT_DB_URL: jdbc:mysql://account-db:3306/accounts?connectionTimeZone=UTC
+      ACCOUNT_DB_USER: account
+      ACCOUNT_DB_PASSWORD: ${ACCOUNT_DB_PASSWORD:?Generate .env first}
+      CUSTOMER_SERVICE_URL: http://customer-service:8082
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
+      account-db:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
       discovery-server:
         condition: service_healthy
       config-server:
@@ -203,6 +212,8 @@ services:
       retries: 30
   account-db:
     image: mysql:8.4
+    ports:
+      - "127.0.0.1:3308:3306"
     environment:
       MYSQL_DATABASE: accounts
       MYSQL_USER: account

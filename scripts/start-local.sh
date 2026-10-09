@@ -2,8 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/local-customer-env.sh
+source scripts/local-account-env.sh
 if [[ -z "${CUSTOMER_DB_URL:-}" ]]; then
   docker compose up -d --wait --wait-timeout 180 customer-db
+fi
+if [[ -z "${ACCOUNT_DB_URL:-}" ]]; then
+  docker compose up -d --wait --wait-timeout 180 account-db
 fi
 mkdir -p .run
 wait_health() {
