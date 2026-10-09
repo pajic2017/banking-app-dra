@@ -5,6 +5,16 @@ spring:
     name: transaction-service
   config:
     import: "${CONFIG_IMPORT:configserver:${CONFIG_SERVER_URL:http://localhost:8888}}"
+  datasource:
+    url: ${TRANSACTION_DB_URL:jdbc:postgresql://localhost:5433/transactions}
+    username: ${TRANSACTION_DB_USER:transaction}
+    password: ${TRANSACTION_DB_PASSWORD}
+  flyway:
+    enabled: true
+bank:
+  account-service-url: ${ACCOUNT_SERVICE_URL:http://localhost:8083}
+  processing:
+    enabled: ${TRANSACTION_PROCESSING_ENABLED:true}
 management:
   endpoints:
     web:

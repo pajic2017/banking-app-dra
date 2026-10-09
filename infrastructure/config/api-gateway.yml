@@ -25,9 +25,9 @@ spring:
             - id: transaction-service
               uri: lb://transaction-service
               predicates:
-                - Path=/api/transactions/**
+                - Path=/api/transactions,/api/transactions/**,/api/transfers
               filters:
-                - StripPrefix=2
+                - StripPrefix=1
             - id: notification-service
               uri: lb://notification-service
               predicates:

@@ -28,6 +28,16 @@ public class Account {
         if (target==AccountStatus.CLOSED && balance.signum()!=0) throw new AccountRuleViolation("An account with a nonzero balance cannot be closed.");
         status=target; updatedAt=now;
     }
+    /** Called only by the atomic posting service while holding this account's write lock. */
+    public void applyPosting(BigDecimal delta, Instant now) {
+        var next = balance.add(delta);
+        if (status != AccountStatus.ACTIVE || next.signum() < 0 ||
+                next.compareTo(com.bank.contracts.posting.v1.PostingCommandV1.MAX_BALANCE) > 0) {
+            throw new AccountRuleViolation("Posting violates account balance or status constraints.");
+        }
+        balance = next;
+        updatedAt = now;
+    }
     public Long getId() { return id; }
     public Long getCustomerId() { return customerId; }
     public String getAccountNumber() { return accountNumber; }

@@ -157,9 +157,17 @@ services:
     ports:
       - "127.0.0.1:8084:8084"
     environment:
+      ACCOUNT_SERVICE_URL: http://account-service:8083
+      TRANSACTION_DB_URL: jdbc:postgresql://transaction-db:5432/transactions
+      TRANSACTION_DB_USER: transaction
+      TRANSACTION_DB_PASSWORD: ${TRANSACTION_DB_PASSWORD:?Generate .env first}
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
+      transaction-db:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
       discovery-server:
         condition: service_healthy
       config-server:
@@ -228,6 +236,8 @@ services:
       retries: 30
   transaction-db:
     image: postgres:17
+    ports:
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_DB: transactions
       POSTGRES_USER: transaction

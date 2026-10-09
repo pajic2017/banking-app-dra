@@ -1,9 +1,9 @@
-# Banking microservices — Phase 3
+# Banking microservices — Phase 4
 
 Java 17, Spring Boot 3.5.16, Spring Cloud 2025.0.3 and checksum-pinned Gradle 8.14.3.
-The platform foundation, Customer Service and Account Service are implemented. Transaction, Authentication and Notification services remain foundation scaffolds. Banking operations, JWT enforcement and Kafka consumers are later-phase work.
+The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Authentication and Notification remain scaffolds; JWT enforcement and Kafka events are later phases.
 
-Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
+Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
 
 ```mermaid
 flowchart LR
@@ -19,13 +19,16 @@ flowchart LR
     Customer -->|account overview| Account
     Account -->|verify customer| Customer
     Account --> AccountDB[(Account MySQL)]
-    Gateway -. foundation routes .-> Others[Auth / Transaction / Notification]
+    Gateway --> Transaction[Transaction Service :8084]
+    Transaction --> PostgreSQL[(Durable commands / PostgreSQL)]
+    Transaction -->|one atomic posting instruction| Account
+    Gateway -. foundation routes .-> Others[Auth / Notification]
 ```
 
 ## Prerequisites
 
 * JDK 17, Python 3, Docker Engine and Compose v2.
-* Tests require Docker: Testcontainers starts a disposable MySQL 8.4 database. No `.env` or application database credentials are needed for tests.
+* Tests require Docker: Testcontainers starts disposable MySQL 8.4 and PostgreSQL 17 databases. No `.env` or application database credentials are needed for tests.
 * Local application infrastructure uses random credentials in ignored `.env`. Generate once; never commit it.
 * Maven Central, Gradle distributions/plugin repositories, Docker Hub and Quay must be reachable.
 * Work from the existing repository root. Cloud tasks are already isolated; do not create a Git worktree unless explicitly requested.
@@ -47,7 +50,30 @@ This activates the retained Java 17 toolchain, writable Gradle/Docker configurat
 ./gradlew --no-daemon :customer-service:test
 ```
 
+The Phase 4 build passed 79 tests with zero failures, errors or skips; see [executed verification](docs/phase-4-verification.md).
+
 Test reports: each module's `build/reports/tests/test/index.html`. Integration tests execute the real Flyway migration and Hibernate schema validation; they do not substitute H2 or silently skip when Docker is unavailable. Databases created by Testcontainers are disposable and unrelated to Compose data volumes. CI runs the same build using Java 17 and Docker on Ubuntu.
+
+## Start the Phase 4 monetary development stack
+
+```bash
+./gradlew --no-daemon build
+# Generate .env once only if absent: python3 scripts/create-local-env.py
+docker compose config --quiet
+docker compose build account-service transaction-service
+docker compose up -d --wait --wait-timeout 300 api-gateway transaction-service
+# Restart an existing gateway after upgrading its route configuration:
+docker compose restart api-gateway
+python3 scripts/transaction-smoke-test.py
+```
+
+This nine-container target adds Transaction Service and its PostgreSQL database to the Customer/Account stack. Valid monetary requests require an `Idempotency-Key`, return 202 PENDING and are processed durably; poll the returned transaction ID until COMPLETED or REJECTED. Both transfer balances, two journal lines and the posting receipt commit atomically inside Account MySQL. The worker retries unconfirmed operations with the same ID, preventing duplicate money movement after a lost response. See [Phase 4](docs/phase-4.md) for examples, rules, recovery and architectural boundaries, and [verification](docs/phase-4-verification.md) for executed checks. Transaction OpenAPI/Swagger run directly on 8084.
+
+The monetary smoke creates synthetic development accounts, exercises deposits/withdrawals/transfers and concurrent duplicate requests, checks reconciliation, drains its funds and leaves closed accounts with an inactive customer. Run only against development data. Optional Postman runner after gateway readiness:
+
+```bash
+npx --yes newman@6.2.1 run postman/transactions.postman_collection.json --delay-request 200
+```
 
 ## Start the Customer and Account development stack
 
@@ -58,7 +84,7 @@ docker compose up -d --wait --wait-timeout 300 api-gateway account-service
 python3 scripts/account-smoke-test.py
 ```
 
-Generate `.env` once before first startup if it does not exist. This starts seven containers with separate Customer/Account MySQL databases. Customer creation is required before account creation; see [Phase 3](docs/phase-3.md) for API examples, validation, status rules, currency handling and limitations. Account Swagger/OpenAPI run directly on port 8083. The smoke test retains closed synthetic accounts and an inactive customer. Account numbers are internal references, not IBANs, and all balances are zero until Phase 4.
+Generate `.env` once before first startup if it does not exist. This starts seven containers with separate Customer/Account MySQL databases. Customer creation is required before account creation; see [Phase 3](docs/phase-3.md) for API examples, validation, status rules, currency handling and limitations. Account Swagger/OpenAPI run directly on port 8083. The smoke test retains closed synthetic accounts and an inactive customer. Account numbers are internal references, not IBANs, and new accounts start with zero balances. Monetary operations are available with the Phase 4 stack.
 
 ## Start the Customer-only development stack
 
@@ -71,7 +97,7 @@ docker compose up -d --wait --wait-timeout 300 api-gateway customer-service
 python3 scripts/customer-smoke-test.py
 ```
 
-Generate `.env` once before first startup if needed. This five-container workflow was verified, including restart persistence. It is the recommended cloud workflow and leaves substantially more disk space than the complete foundation stack. Other scaffold routes have no running destination in this smaller workflow; use the full stack or host-Java workflow for the all-service foundation smoke test.
+Generate `.env` once before first startup if needed. This five-container workflow was verified, including restart persistence. It is a smaller customer-only workflow and leaves substantially more disk space than the complete foundation stack. Other scaffold routes have no running destination in this smaller workflow; use the full stack or host-Java workflow for the all-service foundation smoke test.
 
 ## Start the full Compose stack
 
@@ -97,11 +123,11 @@ docker compose down  # stop and remove containers, retain database volumes
 # docker compose down --volumes
 ```
 
-Compose provisions separate Customer/Account MySQL, Transaction/Auth PostgreSQL and Notification MongoDB stores plus Kafka and Keycloak. Customer and Account services use their own databases. Their MySQL ports are published on loopback 3307 and 3308 for host development; other database ports remain internal. Web ports bind to loopback. Application containers run as a non-root numeric user with read-only jar/probe files.
+Compose provisions separate Customer/Account MySQL, Transaction/Auth PostgreSQL and Notification MongoDB stores plus Kafka and Keycloak. Customer, Account and Transaction services use their own databases. MySQL ports are published on loopback 3307/3308 and Transaction PostgreSQL on loopback 5433 for host development; other database ports remain internal. Web ports bind to loopback. Application containers run as a non-root numeric user with read-only jar/probe files.
 
 ## Lighter host-Java workflow
 
-Use this Linux workflow to run applications as host processes and Customer and Account MySQL as containers. Do not run host and Compose applications on the same ports simultaneously.
+Use this Linux workflow to run applications as host processes and Customer/Account MySQL and Transaction PostgreSQL as containers. Do not run host and Compose applications on the same ports simultaneously.
 
 ```bash
 docker compose down
@@ -109,14 +135,16 @@ docker compose down
 # python3 scripts/create-local-env.py
 ./gradlew --no-daemon build
 bash scripts/start-local.sh
+python3 scripts/transaction-smoke-test.py
+# Optional Account lifecycle regression:
 python3 scripts/account-smoke-test.py
 # Optional Customer lifecycle regression:
 python3 scripts/customer-smoke-test.py
 bash scripts/stop-local.sh
-docker compose stop customer-db account-db
+docker compose stop customer-db account-db transaction-db
 ```
 
-The startup script reads `CUSTOMER_DB_PASSWORD` and `ACCOUNT_DB_PASSWORD` from `.env` without executing that file as shell code, starts both MySQL stores, waits for readiness, then starts the eight applications and runs the foundation smoke test. Existing exported credentials take precedence. With an external database, set `CUSTOMER_DB_URL`, `CUSTOMER_DB_USER` and `CUSTOMER_DB_PASSWORD` securely; setting an explicit URL suppresses automatic local MySQL startup. Account follows the same convention with `ACCOUNT_DB_URL`, `ACCOUNT_DB_USER` and `ACCOUNT_DB_PASSWORD`. Logs/PIDs live in ignored `.run/`. Repeated startup reuses owned running processes; shutdown stops only those Java processes and leaves database data intact.
+The startup script reads `CUSTOMER_DB_PASSWORD`, `ACCOUNT_DB_PASSWORD` and `TRANSACTION_DB_PASSWORD` from `.env` without executing that file as shell code, starts both MySQL stores and Transaction PostgreSQL, waits for readiness, then starts the eight applications and runs the foundation smoke test. Existing exported credentials take precedence. With an external database, set `CUSTOMER_DB_URL`, `CUSTOMER_DB_USER` and `CUSTOMER_DB_PASSWORD` securely; setting an explicit URL suppresses automatic local MySQL startup. Account follows the same convention with `ACCOUNT_DB_URL`, `ACCOUNT_DB_USER` and `ACCOUNT_DB_PASSWORD`. Transaction follows the same convention with `TRANSACTION_DB_URL`, `TRANSACTION_DB_USER` and `TRANSACTION_DB_PASSWORD`. Logs/PIDs live in ignored `.run/`. Repeated startup reuses owned running processes; shutdown stops only those Java processes and leaves database data intact.
 
 For debugging, stop the Customer Service process first, leave discovery/configuration/MySQL running, then:
 
@@ -167,21 +195,21 @@ Node.js/npm are needed only for this optional runner. The collection contains 10
 
 Services retain ports 8080 Gateway, 8081 Auth, 8082 Customer, 8083 Account, 8084 Transaction, 8085 Notification, 8888 Config and 8761 Eureka. All expose `/actuator/health`, `/actuator/health/readiness` and `/actuator/health/liveness`. Keycloak is on 8090 with a `banking` realm and ADMIN, CUSTOMER, BANK_EMPLOYEE roles; no customer users are imported. The public OIDC client uses Authorization Code + PKCE. Authentication enforcement is Phase 6.
 
-The gateway strips only `/api` for customer and account routes, preserving the business `/customers` and `/accounts` paths. Other scaffold routes strip `/api/{service}`. `/api/customers/foundation` remains a compatible infrastructure probe. Customer account overview is available at `/api/customers/{id}/accounts` and returns a paginated response from Account Service; dependency errors return 503.
+The gateway strips only `/api` for Customer, Account and Transaction routes, preserving `/customers`, `/accounts`, `/transactions` and `/transfers`. Other scaffold routes strip `/api/{service}`. `/api/customers/foundation` remains a compatible infrastructure probe. Customer account overview is available at `/api/customers/{id}/accounts` and returns a paginated response from Account Service; dependency errors return 503.
 
 ## Monitoring and limitations
 
 Prometheus, Grafana and Zipkin are optional infrastructure under the `monitoring` Compose profile. Metrics integration, dashboards, tracing and ELK remain Phase 7. Grafana uses a generated local admin password. Kafka is a local single-broker KRaft node; business topics, outbox/events and notification processing begin in Phase 5.
 
-This foundation has no JWT/ownership enforcement and must use development data on local networks. Keycloak uses its development database for now. Kubernetes and deployment automation remain Phase 8. No financial processing correctness is claimed.
+This foundation has no JWT/ownership enforcement and must use development data on local networks. Keycloak uses its development database for now. Kubernetes and deployment automation remain Phase 8. Phase 4 verifies atomic posting, balanced journals, idempotency, concurrent requests and failure recovery; real payment settlement and customer authorization are not connected.
 
-The cloud Docker VFS driver duplicates image layers and has a 32 GB disk. The full Phase 1 stack left about 589 MB free. Prefer the host-Java/Customer MySQL workflow for development and remove unused project containers before substantial builds or Testcontainers runs. Do not start heavy monitoring here without additional disk capacity; preserve data volumes and user-owned caches/images.
+The cloud Docker VFS driver duplicates image layers and has a 32 GB disk. The full Phase 1 stack left about 589 MB free. Prefer the nine-container monetary target or the host-Java/three-database workflow for development and remove unused project containers before substantial builds or Testcontainers runs. Do not start heavy monitoring here without additional disk capacity; preserve data volumes and user-owned caches/images.
 
-Phase 3 stops at account lifecycle and customer integration. Monetary operations and ledger/idempotency implementation belong to Phase 4.
+Phase 4 stops at atomic monetary posting and durable transaction orchestration. Kafka/outbox/notifications begin in Phase 5; security is Phase 6.
 
-## Phase 2 verification
+## Historical Phase 2 verification
 
-The Gradle build is passing with 29 Java tests: 22 Customer Service tests (17 real-MySQL API cases, four Mockito unit tests and one foundation probe test), plus seven unchanged foundation tests with reusable passing results. The affected Customer tests were rerun after the Location header correction.
+The Phase 2 build passed with 29 Java tests: 22 Customer Service tests (17 real-MySQL API cases, four Mockito unit tests and one foundation probe test), plus seven unchanged foundation tests with reusable passing results. The affected Customer tests were rerun after the Location header correction.
 
 The host-Java workflow passed foundation and customer lifecycle smoke tests. The five-container Customer development stack is healthy and passed its lifecycle smoke test. The Postman collection passed 10 requests and 13 assertions using Newman. Customer data/timestamps remained unchanged after restarting both MySQL and Customer Service, and Flyway retained one successful V1 migration. Swagger UI HTML and generated OpenAPI were retrieved successfully. See [detailed results](docs/phase-2-verification.md).
 
@@ -189,4 +217,8 @@ Phase 2 development branch: `feat/phase-2-customer-service`. Updated startup ins
 
 ## Phase 3 feature branch
 
-Phase 3 is developed on `feat/phase-3-account-service`, based on `feat/phase-2-customer-service`. See [Phase 3 design and commands](docs/phase-3.md), [Account Postman collection](postman/accounts.postman_collection.json) and [Phase 3 verification](docs/phase-3-verification.md) for executed outcomes. Java host development needs both databases; the default Account URL is `jdbc:mysql://localhost:3308/accounts?connectionTimeZone=UTC`, user `account`, with ACCOUNT_DB_PASSWORD required. Optional external endpoints use CUSTOMER_SERVICE_URL and ACCOUNT_SERVICE_URL. No API mutates balances in this phase.
+Phase 3 is developed on `feat/phase-3-account-service`, based on `feat/phase-2-customer-service`. See [Phase 3 design and commands](docs/phase-3.md), [Account Postman collection](postman/accounts.postman_collection.json) and [Phase 3 verification](docs/phase-3-verification.md) for executed outcomes. Java host development needs both databases; the default Account URL is `jdbc:mysql://localhost:3308/accounts?connectionTimeZone=UTC`, user `account`, with ACCOUNT_DB_PASSWORD required. Optional external endpoints use CUSTOMER_SERVICE_URL and ACCOUNT_SERVICE_URL. Phase 3 itself introduced no balance mutation; Phase 4 now adds atomic monetary postings.
+
+## Phase 4 feature branch
+
+`feat/phase-4-transaction-service` is based on `feat/phase-3-account-service`. See [Phase 4 design](docs/phase-4.md), [Postman collection](postman/transactions.postman_collection.json) and [verification](docs/phase-4-verification.md). The default host Transaction URL is `jdbc:postgresql://localhost:5433/transactions`, user `transaction`, with `TRANSACTION_DB_PASSWORD` required. Gateway creation, history and search use `/api/transactions`; transfers use `/api/transfers`. Internal posting/reconciliation endpoints have no public gateway route.
