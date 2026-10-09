@@ -1,0 +1,60 @@
+{
+  "info": {
+    "name": "Banking Phase 1 foundation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Gateway customer route",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "http://localhost:8080/api/customers/foundation"
+      }
+    },
+    {
+      "name": "Central configuration",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "http://localhost:8888/customer-service/default"
+      }
+    },
+    {
+      "name": "Gateway readiness",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "http://localhost:8080/actuator/health/readiness"
+      }
+    },
+    {
+      "name": "Discovery registrations",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "http://localhost:8761/eureka/apps"
+      }
+    }
+  ]
+}
