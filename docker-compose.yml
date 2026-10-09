@@ -97,9 +97,14 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     environment:
+      CUSTOMER_DB_URL: jdbc:mysql://customer-db:3306/customers?connectionTimeZone=UTC
+      CUSTOMER_DB_USER: customer
+      CUSTOMER_DB_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Generate .env first}
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
+      customer-db:
+        condition: service_healthy
       discovery-server:
         condition: service_healthy
       config-server:
@@ -182,6 +187,8 @@ services:
     mem_limit: 512m
   customer-db:
     image: mysql:8.4
+    ports:
+      - "127.0.0.1:3307:3306"
     environment:
       MYSQL_DATABASE: customers
       MYSQL_USER: customer

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/local-customer-env.sh
+if [[ -z "${CUSTOMER_DB_URL:-}" ]]; then
+  docker compose up -d --wait --wait-timeout 180 customer-db
+fi
 mkdir -p .run
 wait_health() {
   for ((attempt=0; attempt<90; attempt++)); do

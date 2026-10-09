@@ -5,6 +5,20 @@ spring:
     name: customer-service
   config:
     import: "${CONFIG_IMPORT:configserver:${CONFIG_SERVER_URL:http://localhost:8888}}"
+  datasource:
+    url: ${CUSTOMER_DB_URL:jdbc:mysql://localhost:3307/customers?connectionTimeZone=UTC}
+    username: ${CUSTOMER_DB_USER:customer}
+    password: ${CUSTOMER_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
 management:
   endpoints:
     web:
