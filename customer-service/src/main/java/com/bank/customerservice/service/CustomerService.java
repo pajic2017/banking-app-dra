@@ -16,10 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class CustomerService {
     private final CustomerRepository repository;
     private final Clock clock;
+    private final com.bank.customerservice.events.EventOutbox events;
 
-    public CustomerService(CustomerRepository repository, Clock clock) {
+    public CustomerService(CustomerRepository repository, Clock clock, com.bank.customerservice.events.EventOutbox events) {
         this.repository = repository;
-        this.clock = clock;
+        this.clock = clock; this.events=events;
     }
 
     @Transactional
@@ -27,7 +28,10 @@ public class CustomerService {
         var customer = new Customer(request.firstName(), request.lastName(), request.email(),
                 request.phone(), now());
         // Flush here: the unique database constraint also protects concurrent creates.
-        return CustomerResponse.from(repository.saveAndFlush(customer));
+        var saved=repository.saveAndFlush(customer);
+        events.add(com.bank.contracts.events.v1.EventType.CUSTOMER_CREATED,String.valueOf(saved.getId()),
+                com.bank.customerservice.events.EventOutbox.currentCorrelation(),java.util.Map.of("customerId",String.valueOf(saved.getId())));
+        return CustomerResponse.from(saved);
     }
 
     public CustomerResponse get(long id) { return CustomerResponse.from(find(id)); }

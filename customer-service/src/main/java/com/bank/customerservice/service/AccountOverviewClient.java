@@ -18,7 +18,7 @@ public class AccountOverviewClient {
     public CustomerAccountPage get(long customerId,int page,int size) {
         try {
             var result=rest.get().uri("/accounts/customer/{id}?page={page}&size={size}",customerId,page,size)
-                    .retrieve().body(CustomerAccountPage.class);
+                    .header("X-Correlation-ID",com.bank.customerservice.events.EventOutbox.currentCorrelation().toString()).retrieve().body(CustomerAccountPage.class);
             if (result==null || result.items()==null || result.items().stream().anyMatch(a->a==null || a.customerId()==null || a.customerId()!=customerId)) {
                 throw new AccountOverviewUnavailable();
             }

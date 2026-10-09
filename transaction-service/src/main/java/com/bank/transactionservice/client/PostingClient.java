@@ -17,8 +17,8 @@ public class PostingClient {
         rest = builder.baseUrl(url).requestFactory(factory).build();
     }
 
-    public PostingResultV1 post(PostingCommandV1 command) {
-        var result = rest.post().uri("/internal/v1/postings").body(command).retrieve().body(PostingResultV1.class);
+    public PostingResultV1 post(PostingCommandV1 command,java.util.UUID correlation) {
+        var result = rest.post().uri("/internal/v1/postings").header("X-Correlation-ID",correlation.toString()).body(command).retrieve().body(PostingResultV1.class);
         if (result == null || !command.operationId().equals(result.operationId()) || result.status() == null ||
                 !command.instructionHash().equals(result.instructionHash()) || result.recordedAt() == null ||
                 (result.status() == PostingStatus.REJECTED) != (result.failureCode() != null)) {

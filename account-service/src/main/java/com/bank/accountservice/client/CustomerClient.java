@@ -10,7 +10,7 @@ public class CustomerClient {
     public CustomerClient(RestClient customerRestClient) { rest=customerRestClient; }
     public void requireActive(long id) {
         CustomerView customer;
-        try { customer=rest.get().uri("/customers/{id}",id).retrieve().body(CustomerView.class); }
+        try { customer=rest.get().uri("/customers/{id}",id).header("X-Correlation-ID",com.bank.accountservice.events.EventOutbox.currentCorrelation().toString()).retrieve().body(CustomerView.class); }
         catch (HttpClientErrorException.NotFound missing) { throw new AccountFailure(HttpStatus.UNPROCESSABLE_ENTITY,"Customer does not exist."); }
         catch (RestClientException unavailable) { throw new AccountFailure(HttpStatus.SERVICE_UNAVAILABLE,"Customer verification is unavailable; retry later."); }
         if (customer==null || customer.id()==null || customer.id()!=id ||

@@ -13,6 +13,12 @@ fi
 if [[ -z "${TRANSACTION_DB_URL:-}" ]]; then
   docker compose up -d --wait --wait-timeout 180 transaction-db
 fi
+if [[ -z "${NOTIFICATION_MONGO_URI:-}" ]]; then
+  docker compose up -d --wait --wait-timeout 180 notification-db
+fi
+if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+  docker compose up -d --wait --wait-timeout 180 kafka
+fi
 mkdir -p .run
 wait_health() {
   for ((attempt=0; attempt<90; attempt++)); do

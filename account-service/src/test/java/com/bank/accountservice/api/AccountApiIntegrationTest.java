@@ -22,7 +22,7 @@ import org.testcontainers.junit.jupiter.*;
 import static org.assertj.core.api.Assertions.*;
 @Testcontainers
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
+        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
 class AccountApiIntegrationTest {
     @Container static final MySQLContainer<?> MYSQL=new MySQLContainer<>("mysql:8.4").withDatabaseName("accounts");
     static final ExecutorService threads=Executors.newCachedThreadPool();
@@ -54,7 +54,7 @@ class AccountApiIntegrationTest {
     @Autowired TestRestTemplate rest;
     @Autowired AccountRepository repository;
     @Autowired JdbcTemplate jdbc;
-    @BeforeEach void reset() {mode="ACTIVE";repository.deleteAllInBatch();}
+    @BeforeEach void reset() {mode="ACTIVE";jdbc.update("DELETE FROM event_outbox");repository.deleteAllInBatch();}
     private AccountResponse create(long customerId,AccountType type,String currency) {
         var r=rest.postForEntity("/accounts",new CreateAccountRequest(customerId,type,currency),AccountResponse.class);
         assertThat(r.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -122,4 +122,14 @@ class AccountApiIntegrationTest {
         var doc=rest.getForObject("/v3/api-docs",Map.class);var paths=(Map<?,?>)doc.get("paths");
         assertThat(paths.containsKey("/accounts")).isTrue();assertThat(paths.containsKey("/accounts/{id}/balance")).isTrue();
     }
+    @Test void accountCreationOutboxFailureRollsBackTheAccount() {
+        jdbc.execute("ALTER TABLE event_outbox ADD CONSTRAINT injected_capture_failure CHECK (event_type<>'ACCOUNT_CREATED')");
+        try {
+            var response=rest.postForEntity("/accounts",new CreateAccountRequest(41L,AccountType.CURRENT,"BAM"),Map.class);
+            assertThat(response.getStatusCode().is2xxSuccessful()).isFalse();
+        } finally {jdbc.execute("ALTER TABLE event_outbox DROP CHECK injected_capture_failure");}
+        assertThat(repository.count()).isZero();assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_outbox",Integer.class)).isZero();
+        create(41L,AccountType.CURRENT,"BAM");assertThat(jdbc.queryForObject("SELECT event_type FROM event_outbox",String.class)).isEqualTo("ACCOUNT_CREATED");
+    }
+
 }

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bank:events:v1",
+  "title": "BankEventV1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "version",
+    "correlationId",
+    "producer",
+    "occurredAt",
+    "aggregateId",
+    "data"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "enum": [
+        "CUSTOMER_CREATED",
+        "ACCOUNT_CREATED",
+        "TRANSACTION_COMPLETED",
+        "TRANSACTION_FAILED",
+        "SUSPICIOUS_TRANSACTION_DETECTED"
+      ]
+    },
+    "version": {
+      "const": 1
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "producer": {
+      "type": "string"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "enum": [
+              "CUSTOMER_CREATED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "producer": {
+            "const": "customer-service"
+          },
+          "data": {
+            "required": [
+              "customerId"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "enum": [
+              "ACCOUNT_CREATED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "producer": {
+            "const": "account-service"
+          },
+          "data": {
+            "required": [
+              "accountId",
+              "customerId",
+              "accountType",
+              "currency"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "enum": [
+              "TRANSACTION_COMPLETED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "producer": {
+            "const": "transaction-service"
+          },
+          "data": {
+            "required": [
+              "transactionId",
+              "operationType",
+              "amount",
+              "currency"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "enum": [
+              "TRANSACTION_FAILED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "producer": {
+            "const": "transaction-service"
+          },
+          "data": {
+            "required": [
+              "transactionId",
+              "operationType",
+              "amount",
+              "currency",
+              "failureCode"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "enum": [
+              "SUSPICIOUS_TRANSACTION_DETECTED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "producer": {
+            "const": "fraud-detection-service"
+          },
+          "data": {
+            "required": [
+              "accountId",
+              "reason"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

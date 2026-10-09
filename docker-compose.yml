@@ -97,6 +97,7 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL: http://account-service:8083
       CUSTOMER_DB_URL: jdbc:mysql://customer-db:3306/customers?connectionTimeZone=UTC
       CUSTOMER_DB_USER: customer
@@ -126,6 +127,7 @@ services:
     ports:
       - "127.0.0.1:8083:8083"
     environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_DB_URL: jdbc:mysql://account-db:3306/accounts?connectionTimeZone=UTC
       ACCOUNT_DB_USER: account
       ACCOUNT_DB_PASSWORD: ${ACCOUNT_DB_PASSWORD:?Generate .env first}
@@ -157,6 +159,7 @@ services:
     ports:
       - "127.0.0.1:8084:8084"
     environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL: http://account-service:8083
       TRANSACTION_DB_URL: jdbc:postgresql://transaction-db:5432/transactions
       TRANSACTION_DB_USER: transaction
@@ -188,9 +191,15 @@ services:
     ports:
       - "127.0.0.1:8085:8085"
     environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      NOTIFICATION_MONGO_URI: mongodb://notification-db:27017/notifications?retryWrites=false&w=majority&journal=true&serverSelectionTimeoutMS=2000&connectTimeoutMS=2000&socketTimeoutMS=3000&wtimeoutMS=3000
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
+      kafka:
+        condition: service_healthy
+      notification-db:
+        condition: service_healthy
       discovery-server:
         condition: service_healthy
       config-server:
@@ -264,6 +273,8 @@ services:
       retries: 20
   notification-db:
     image: mongo:8.0
+    ports:
+      - "127.0.0.1:27018:27017"
     volumes:
       - notification-db:/data/db
     healthcheck:
@@ -273,13 +284,17 @@ services:
       retries: 20
   kafka:
     image: apache/kafka:3.9.1
+    ports:
+      - "127.0.0.1:19092:19092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:19092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1

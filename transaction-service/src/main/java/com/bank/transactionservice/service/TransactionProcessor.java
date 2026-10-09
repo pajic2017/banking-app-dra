@@ -23,7 +23,7 @@ public class TransactionProcessor {
         if (transaction.isEmpty()) return false;
         var row = transaction.get();
         com.bank.contracts.posting.v1.PostingResultV1 result;
-        try { result = postings.post(row.command()); }
+        try { result = postings.post(row.command(),row.correlationId()); }
         catch (RestClientException | IllegalStateException unavailable) {
             // An HTTP failure can follow a successful commit. Never infer rejection or compensate here.
             repository.retry(row, clock.instant().truncatedTo(ChronoUnit.MICROS), "POSTING_UNCONFIRMED");

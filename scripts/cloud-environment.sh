@@ -3,8 +3,9 @@
 export JAVA_HOME=/workspace/toolchains/java17
 export GRADLE_USER_HOME=/workspace/.gradle-cache
 export DOCKER_CONFIG=/workspace/.docker-runtime
+export NPM_CONFIG_CACHE=/workspace/.npm-cache
 export PATH="$JAVA_HOME/bin:$PATH"
-mkdir -p "$GRADLE_USER_HOME" "$DOCKER_CONFIG"
+mkdir -p "$GRADLE_USER_HOME" "$DOCKER_CONFIG" "$NPM_CONFIG_CACHE"
 python3 - <<'PY'
 import os
 from pathlib import Path

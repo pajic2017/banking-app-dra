@@ -15,10 +15,11 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceTest {
     @Mock CustomerRepository repository;
+    @Mock com.bank.customerservice.events.EventOutbox events;
     private CustomerService service;
     private final Instant now = Instant.parse("2026-10-09T12:00:00Z");
 
-    @BeforeEach void setup() { service = new CustomerService(repository, Clock.fixed(now, ZoneOffset.UTC)); }
+    @BeforeEach void setup() { service = new CustomerService(repository, Clock.fixed(now, ZoneOffset.UTC),events); }
 
     @Test void normalizesInformationAndCreatesAnActiveCustomer() {
         when(repository.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));

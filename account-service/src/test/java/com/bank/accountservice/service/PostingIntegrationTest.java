@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.*;
 
 @Testcontainers
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
+        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
 class PostingIntegrationTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4").withDatabaseName("accounts");
     @DynamicPropertySource static void properties(DynamicPropertyRegistry p) {

@@ -31,6 +31,6 @@ spring:
             - id: notification-service
               uri: lb://notification-service
               predicates:
-                - Path=/api/notifications/**
+                - Path=/api/notifications,/api/notifications/**
               filters:
-                - StripPrefix=2
+                - StripPrefix=1

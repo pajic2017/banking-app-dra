@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.*;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml", "spring.cloud.config.enabled=false",
+        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml", "bank.events.relay-enabled=false","spring.cloud.config.enabled=false",
         "eureka.client.enabled=false"})
 class CustomerApiIntegrationTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4").withDatabaseName("customers");
@@ -35,8 +35,12 @@ class CustomerApiIntegrationTest {
     @Autowired TestRestTemplate rest;
     @Autowired CustomerRepository repository;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.bank.customerservice.events.OutboxRelay relay;
+    @Autowired com.bank.customerservice.service.CustomerService service;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean org.springframework.kafka.core.KafkaTemplate<String,String> kafka;
 
-    @BeforeEach void reset() { repository.deleteAllInBatch(); }
+
+    @BeforeEach void reset() { jdbc.update("DELETE FROM event_outbox");repository.deleteAllInBatch();org.mockito.Mockito.reset(kafka); }
 
     @Test void completeLifecycleRetainsTheRowAndCreationTime() {
         var created = create(" CUSTOMER@EXAMPLE.COM ");
@@ -185,4 +189,40 @@ class CustomerApiIntegrationTest {
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         return result;
     }
+    @Test void businessAndOutboxCaptureAreAtomicAndExcludeContactDetails() {
+        jdbc.execute("ALTER TABLE event_outbox ADD CONSTRAINT injected_capture_failure CHECK (event_type<>'CUSTOMER_CREATED')");
+        try {assertThatThrownBy(()->service.create(new CustomerRequest("A","B","atomic@example.com","+38761123456"))).isInstanceOf(org.springframework.dao.DataAccessException.class);}
+        finally {jdbc.execute("ALTER TABLE event_outbox DROP CHECK injected_capture_failure");}
+        assertThat(repository.count()).isZero();assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_outbox",Integer.class)).isZero();
+        var customer=create("atomic@example.com").getBody();
+        var payload=jdbc.queryForObject("SELECT payload FROM event_outbox",String.class);
+        assertThat(payload).contains("CUSTOMER_CREATED",customer.id().toString()).doesNotContain("atomic@example.com","firstName","phone");
+    }
+    @Test void brokerFailureRetainsPendingEventThenRetryPublishesSameId() {
+        create("relay@example.com");
+        org.mockito.Mockito.when(kafka.send(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.concurrent.CompletableFuture.failedFuture(new java.util.concurrent.TimeoutException()),java.util.concurrent.CompletableFuture.completedFuture(null));
+        assertThat(relay.publishNext()).isTrue();assertThat(relay.publishNext()).isFalse();
+        assertThat(jdbc.queryForObject("SELECT status FROM event_outbox",String.class)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT attempts FROM event_outbox",Integer.class)).isEqualTo(1);
+        jdbc.update("UPDATE event_outbox SET next_attempt_at='2000-01-01'");assertThat(relay.publishNext()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT status FROM event_outbox",String.class)).isEqualTo("PUBLISHED");
+        var payload=org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(kafka,org.mockito.Mockito.times(2)).send(org.mockito.ArgumentMatchers.eq("bank.customer.created"),org.mockito.ArgumentMatchers.anyString(),payload.capture());
+        assertThat(payload.getAllValues().get(0)).isEqualTo(payload.getAllValues().get(1));
+    }
+    @Test void brokerAckBeforeDatabaseFailureCanReplayIdenticalEnvelope() {
+        create("ack@example.com");
+        org.mockito.Mockito.when(kafka.send(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
+        jdbc.execute("ALTER TABLE event_outbox ADD CONSTRAINT injected_mark_failure CHECK (status<>'PUBLISHED')");
+        try {assertThatThrownBy(()->relay.publishNext()).isInstanceOf(org.springframework.dao.DataAccessException.class);}
+        finally {jdbc.execute("ALTER TABLE event_outbox DROP CHECK injected_mark_failure");}
+        assertThat(jdbc.queryForObject("SELECT status FROM event_outbox",String.class)).isEqualTo("PENDING");
+        assertThat(relay.publishNext()).isTrue();
+        var payload=org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(kafka,org.mockito.Mockito.times(2)).send(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),payload.capture());
+        assertThat(payload.getAllValues().get(0)).isEqualTo(payload.getAllValues().get(1));
+    }
+
 }

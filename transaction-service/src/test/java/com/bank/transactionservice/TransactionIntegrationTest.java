@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.*;
 
 @Testcontainers
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","spring.cloud.config.enabled=false","eureka.client.enabled=false","bank.processing.enabled=false"})
+        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false","bank.processing.enabled=false"})
 class TransactionIntegrationTest {
     @Container static final PostgreSQLContainer<?> POSTGRES=new PostgreSQLContainer<>("postgres:17");
     static final ObjectMapper JSON=new ObjectMapper().findAndRegisterModules();
@@ -63,7 +63,7 @@ class TransactionIntegrationTest {
     @Autowired TransactionProcessor processor;
     @Autowired TestRestTemplate rest;
     @Autowired JdbcTemplate jdbc;
-    @BeforeEach void reset(){jdbc.update("DELETE FROM transactions");receipts.clear();applications.set(0);mode="COMPLETED";}
+    @BeforeEach void reset(){jdbc.update("DELETE FROM event_outbox");jdbc.update("DELETE FROM transactions");receipts.clear();applications.set(0);mode="COMPLETED";}
     private TransactionView submit(String key){return service.submit(key,PostingType.DEPOSIT,null,1L,new BigDecimal("10"),"BAM","test");}
     private void due(){jdbc.update("UPDATE transactions SET next_attempt_at=now()-interval '1 second' WHERE status='PENDING'");}
 
@@ -148,4 +148,26 @@ class TransactionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='1' AND success",Integer.class)).isEqualTo(1);
         var doc=rest.getForObject("/v3/api-docs",Map.class);assertThat(((Map<?,?>)doc.get("paths")).containsKey("/transfers")).isTrue();
     }
+    @Test void terminalOutboxFailureRollsBackStatusAndRetryCreatesOneEvent() {
+        var row=submit("outbox-failure");
+        jdbc.execute("ALTER TABLE event_outbox ADD CONSTRAINT injected_capture_failure CHECK (event_type<>'TRANSACTION_COMPLETED')");
+        try {assertThatThrownBy(()->processor.processNext()).isInstanceOf(org.springframework.dao.DataAccessException.class);}
+        finally {jdbc.execute("ALTER TABLE event_outbox DROP CONSTRAINT injected_capture_failure");}
+        assertThat(service.get(row.id()).status()).isEqualTo(TransactionStatus.PENDING);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_outbox",Integer.class)).isZero();assertThat(applications.get()).isEqualTo(1);
+        processor.processNext();assertThat(service.get(row.id()).status()).isEqualTo(TransactionStatus.COMPLETED);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_outbox",Integer.class)).isEqualTo(1);assertThat(applications.get()).isEqualTo(1);
+        assertThat(processor.processNext()).isFalse();
+    }
+    @Test void requestCorrelationIsPersistedAndTerminalFailureUsesItsOwnTopic() throws Exception {
+        var correlation=UUID.randomUUID();var h=new HttpHeaders();h.set("Idempotency-Key","correlated");h.set("X-Correlation-ID",correlation.toString());
+        var response=rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("10"),"BAM",""),h),TransactionView.class);
+        assertThat(response.getHeaders().getFirst("X-Correlation-ID")).isEqualTo(correlation.toString());assertThat(response.getBody().correlationId()).isEqualTo(correlation);
+        mode="REJECTED";processor.processNext();
+        var event=JSON.readValue(jdbc.queryForObject("SELECT payload FROM event_outbox",String.class),com.bank.contracts.events.v1.BankEventV1.class);
+        assertThat(event.correlationId()).isEqualTo(correlation);assertThat(event.eventType()).isEqualTo(com.bank.contracts.events.v1.EventType.TRANSACTION_FAILED);
+        assertThat(jdbc.queryForObject("SELECT topic FROM event_outbox",String.class)).isEqualTo("bank.transaction.failed");
+        h.set("X-Correlation-ID","invalid");assertThat(rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("10"),"BAM",""),h),Map.class).getStatusCode().value()).isEqualTo(400);
+    }
+
 }

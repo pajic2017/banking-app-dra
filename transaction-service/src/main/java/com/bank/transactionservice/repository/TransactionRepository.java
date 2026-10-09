@@ -13,16 +13,17 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class TransactionRepository {
     private final JdbcTemplate jdbc;
-    public TransactionRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    private final com.bank.transactionservice.events.EventOutbox events;
+    public TransactionRepository(JdbcTemplate jdbc,com.bank.transactionservice.events.EventOutbox events) { this.jdbc = jdbc;this.events=events; }
 
     public void insert(PostingCommandV1 command, String key, String description, String hash, Instant now) {
         jdbc.update("""
             INSERT INTO transactions(id,transaction_reference,idempotency_key,request_hash,transaction_type,
-                from_account_id,to_account_id,amount,currency,description,next_attempt_at,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING
+                from_account_id,to_account_id,amount,currency,description,next_attempt_at,created_at,updated_at,correlation_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING
             """, command.operationId(), "TX-" + command.operationId(), key, hash, command.type().name(),
             command.fromAccountId(), command.toAccountId(), command.amount(), command.currency(), description,
-            Timestamp.from(now), Timestamp.from(now), Timestamp.from(now));
+            Timestamp.from(now), Timestamp.from(now), Timestamp.from(now),com.bank.transactionservice.events.EventOutbox.currentCorrelation());
     }
 
     public String requestHash(String key) { return jdbc.queryForObject("SELECT request_hash FROM transactions WHERE idempotency_key=?", String.class, key); }
@@ -40,6 +41,15 @@ public class TransactionRepository {
     public void complete(UUID id, PostingResultV1 result, Instant now) {
         jdbc.update("UPDATE transactions SET status=?,failure_code=?,attempts=attempts+1,last_retry_code=NULL,updated_at=? WHERE id=?",
                 result.status().name(), result.failureCode(), Timestamp.from(now), id);
+        var row=get(id).orElseThrow();
+        var data=new java.util.LinkedHashMap<String,String>();
+        data.put("transactionId",id.toString());data.put("operationType",row.type().name());
+        if(row.fromAccountId()!=null)data.put("fromAccountId",row.fromAccountId().toString());
+        if(row.toAccountId()!=null)data.put("toAccountId",row.toAccountId().toString());
+        data.put("amount",row.amount().toPlainString());data.put("currency",row.currency());
+        if(result.failureCode()!=null)data.put("failureCode",result.failureCode());
+        events.add(result.status()==PostingStatus.COMPLETED?com.bank.contracts.events.v1.EventType.TRANSACTION_COMPLETED:
+                com.bank.contracts.events.v1.EventType.TRANSACTION_FAILED,id.toString(),row.correlationId(),data);
     }
 
     public void retry(TransactionView transaction, Instant now, String code) {
@@ -67,6 +77,6 @@ public class TransactionRepository {
                 (Long)row.getObject("to_account_id"), row.getBigDecimal("amount").setScale(java.util.Currency.getInstance(currency).getDefaultFractionDigits()),
                 currency, row.getString("description"), TransactionStatus.valueOf(row.getString("status")),
                 row.getString("failure_code"), row.getInt("attempts"), row.getString("last_retry_code"),
-                row.getTimestamp("created_at").toInstant(), row.getTimestamp("updated_at").toInstant());
+                row.getTimestamp("created_at").toInstant(), row.getTimestamp("updated_at").toInstant(),row.getObject("correlation_id",UUID.class));
     }
 }
