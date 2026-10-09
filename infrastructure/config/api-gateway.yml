@@ -1,0 +1,36 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - StripPrefix=2
+            - id: customer-service
+              uri: lb://customer-service
+              predicates:
+                - Path=/api/customers,/api/customers/**
+              filters:
+                - StripPrefix=1
+            - id: account-service
+              uri: lb://account-service
+              predicates:
+                - Path=/api/accounts,/api/accounts/**
+              filters:
+                - StripPrefix=1
+            - id: transaction-service
+              uri: lb://transaction-service
+              predicates:
+                - Path=/api/transactions/**
+              filters:
+                - StripPrefix=2
+            - id: notification-service
+              uri: lb://notification-service
+              predicates:
+                - Path=/api/notifications/**
+              filters:
+                - StripPrefix=2
