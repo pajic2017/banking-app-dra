@@ -1,0 +1,314 @@
+name: banking-foundation
+services:
+  discovery-server:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: discovery-server
+    ports:
+      - "127.0.0.1:8761:8761"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8761/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  config-server:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: config-server
+    ports:
+      - "127.0.0.1:8888:8888"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      CONFIG_REPO: file:/config/
+    volumes:
+      - ./infrastructure/config:/config:ro
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8888/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  api-gateway:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: api-gateway
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  auth-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: auth-service
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8081/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  customer-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: customer-service
+    ports:
+      - "127.0.0.1:8082:8082"
+    environment:
+      CUSTOMER_DB_URL: jdbc:mysql://customer-db:3306/customers?connectionTimeZone=UTC
+      CUSTOMER_DB_USER: customer
+      CUSTOMER_DB_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Generate .env first}
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    depends_on:
+      customer-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8082/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  account-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: account-service
+    ports:
+      - "127.0.0.1:8083:8083"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8083/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  transaction-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: transaction-service
+    ports:
+      - "127.0.0.1:8084:8084"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8084/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  notification-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      args:
+        SERVICE: notification-service
+    ports:
+      - "127.0.0.1:8085:8085"
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app", "HealthCheck", "http://localhost:8085/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 512m
+  customer-db:
+    image: mysql:8.4
+    ports:
+      - "127.0.0.1:3307:3306"
+    environment:
+      MYSQL_DATABASE: customers
+      MYSQL_USER: customer
+      MYSQL_PASSWORD: ${CUSTOMER_DB_PASSWORD:?Generate .env first}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Generate .env first}
+    volumes:
+      - customer-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -u $$MYSQL_USER -D $$MYSQL_DATABASE -e 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  account-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: accounts
+      MYSQL_USER: account
+      MYSQL_PASSWORD: ${ACCOUNT_DB_PASSWORD:?Generate .env first}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Generate .env first}
+    volumes:
+      - account-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -u $$MYSQL_USER -D $$MYSQL_DATABASE -e 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  transaction-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: transactions
+      POSTGRES_USER: transaction
+      POSTGRES_PASSWORD: ${TRANSACTION_DB_PASSWORD:?Generate .env first}
+    volumes:
+      - transaction-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  auth-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: auth
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?Generate .env first}
+    volumes:
+      - auth-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  notification-db:
+    image: mongo:8.0
+    volumes:
+      - notification-db:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.5
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Generate .env first}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - ./infrastructure/keycloak:/opt/keycloak/data/import:ro
+      - keycloak-data:/opt/keycloak/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/9000; printf \"GET /health/ready HTTP/1.0\\r\\n\\r\\n\" >&3; cat <&3 | grep -q UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [monitoring]
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["127.0.0.1:9090:9090"]
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Generate .env first}
+    profiles: [monitoring]
+    ports: ["127.0.0.1:3000:3000"]
+  zipkin:
+    image: openzipkin/zipkin:3.5
+    profiles: [monitoring]
+    ports: ["127.0.0.1:9411:9411"]
+volumes:
+  customer-db:
+  account-db:
+  transaction-db:
+  auth-db:
+  notification-db:
+  kafka-data:
+  keycloak-data:

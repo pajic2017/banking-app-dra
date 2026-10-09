@@ -1,0 +1,2 @@
+plugins { id 'java-library' }
+// Reserved for versioned DTOs and event schemas; never entities or repositories.
