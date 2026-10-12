@@ -19,6 +19,9 @@ subprojects {
         }
         dependencies {
             implementation 'org.springframework.boot:spring-boot-starter-actuator'
+            implementation 'io.micrometer:micrometer-registry-prometheus'
+            implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+            implementation 'io.opentelemetry:opentelemetry-exporter-zipkin'
             implementation 'org.springframework.cloud:spring-cloud-starter-config'
             testImplementation 'org.springframework.boot:spring-boot-starter-test'
             testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

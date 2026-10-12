@@ -15,9 +15,12 @@ public class NotificationConsumer {
             "bank.customer.created","bank.account.created","bank.transaction.completed","bank.transaction.failed","bank.fraud.detected"},containerFactory="notificationFactory")
     public void receive(ConsumerRecord<String,String> record) {
         var event=codec.decode(record.value(),record.topic());
+        var previous=MDC.get("correlationId");MDC.put("correlationId",event.correlationId().toString());
+        try {
         if(notifications.accept(event,record.topic(),record.partition(),record.offset())) {
             LOG.info("Notification stored eventId={} type={} correlationId={}",event.eventId(),event.eventType(),event.correlationId());
         }
+        } finally {if(previous==null)MDC.remove("correlationId");else MDC.put("correlationId",previous);}
     }
     @KafkaListener(id="notification-dlt",groupId="${bank.notifications.dlt-group:bank.notifications.dlt.v1}",topics={
             "bank.customer.created.DLT","bank.account.created.DLT","bank.transaction.completed.DLT","bank.transaction.failed.DLT","bank.fraud.detected.DLT"},containerFactory="deadLetterFactory")

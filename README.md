@@ -1,9 +1,9 @@
-# Banking microservices — Phase 6
+# Banking microservices — Phase 7
 
 Java 17, Spring Boot 3.5.16, Spring Cloud 2025.0.3 and checksum-pinned Gradle 8.14.3.
-The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Phase 5 adds transactional outboxes, versioned Kafka events, MongoDB notifications, consumer deduplication, retries and retained dead letters with explicit replay. Phase 6 validates Keycloak JWTs at gateway and backends, enforces roles/customer ownership, and authenticates internal service calls. See the security guide before running earlier-phase commands.
+The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Phase 5 adds transactional outboxes, versioned Kafka events, MongoDB notifications, consumer deduplication, retries and retained dead letters with explicit replay. Phase 6 validates Keycloak JWTs at gateway and backends, enforces roles/customer ownership, and authenticates internal service calls. Phase 7 adds authenticated Prometheus scrapes, Grafana, OpenTelemetry/Zipkin tracing through durable workers and Kafka, ECS JSON logs and ELK. See the current guides before running earlier-phase commands.
 
-Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md), [Phase 5 Kafka and Notification Service](docs/phase-5.md), [Phase 6 Security](docs/phase-6.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
+Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md), [Phase 5 Kafka and Notification Service](docs/phase-5.md), [Phase 6 Security](docs/phase-6.md), [Phase 7 Observability](docs/phase-7.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
 
 ```mermaid
 flowchart LR
@@ -58,16 +58,31 @@ Current build results are in [Phase 6 verification](docs/phase-6-verification.md
 
 Test reports: each module's `build/reports/tests/test/index.html`. Integration tests execute the real Flyway migration and Hibernate schema validation; they do not substitute H2 or silently skip when Docker is unavailable. Databases created by Testcontainers are disposable and unrelated to Compose data volumes. CI runs the same build using Java 17 and Docker on Ubuntu.
 
+## Phase 7 monitoring workflow
+
+Start the secured applications below after `python3 scripts/prepare-monitoring.py` and rebuild all eight changed service images. Then:
+
+```bash
+bash scripts/start-monitoring.sh
+python3 scripts/setup-log-retention.py
+python3 scripts/monitoring-smoke-test.py
+```
+
+The Phase 7 OpenTelemetry build passed 120 tests; see [verification](docs/phase-7-verification.md).
+
+The standard monitoring profile has Prometheus, Grafana, Zipkin, Elasticsearch, Logstash, Filebeat and Kibana. This 32 GB VFS cloud uses verified single-layer vendor images and the twenty-container core target, with Kibana in a separate viewing mode. Metrics require a dedicated scrape credential; banking APIs keep JWT roles/ownership. See [Phase 7](docs/phase-7.md) for trace continuation, dashboards, ELK, retention, resource limits and viewing commands.
+
 ## Start the secured Phase 6 development stack
 
 ```bash
 source scripts/cloud-environment.sh  # cloud only
 # Generate .env once only if absent: python3 scripts/create-local-env.py
 python3 scripts/prepare-security-env.py
+python3 scripts/prepare-monitoring.py
 ./gradlew --no-daemon build
 docker compose up -d --wait --wait-timeout 240 keycloak
 python3 scripts/setup-keycloak.py
-docker compose build api-gateway auth-service customer-service account-service transaction-service notification-service
+docker compose build discovery-server config-server api-gateway auth-service customer-service account-service transaction-service notification-service
 docker compose up -d --wait --wait-timeout 300 api-gateway auth-service transaction-service notification-service
 docker compose restart api-gateway
 python3 scripts/security-smoke-test.py
@@ -245,13 +260,13 @@ The gateway strips only `/api` for Customer, Account and Transaction routes, pre
 
 ## Monitoring and limitations
 
-Prometheus, Grafana and Zipkin are optional infrastructure under the `monitoring` Compose profile. Metrics integration, dashboards, tracing and ELK remain Phase 7. Grafana uses a generated local admin password. Kafka is a local single-broker KRaft node; Phase 5 provisions five business topics and five dead-letter topics, each with three partitions. Production replication and monitoring remain future work.
+Prometheus, Grafana and Zipkin are optional infrastructure under the `monitoring` Compose profile. Phase 7 now integrates metrics, dashboards, OpenTelemetry tracing and ELK. Grafana uses a generated local admin password. Kafka is a local single-broker KRaft node; Phase 5 provisions five business topics and five dead-letter topics, each with three partitions. Production replication and monitoring remain future work.
 
 This development stack enforces JWTs and ownership. The imported realm uses loopback HTTP/start-dev; production IdP/network/secret hardening still needs a deployment-specific configuration. Keycloak uses its development database for now. Kubernetes and deployment automation remain Phase 8. Phase 4 verifies atomic posting, balanced journals, idempotency, concurrent requests and failure recovery; real payment settlement and customer authorization are not connected.
 
 The cloud Docker VFS driver duplicates image layers and has a 32 GB disk. The full Phase 1 stack left about 589 MB free. Prefer the twelve-container event target or the host-Java workflow for development and remove unused project containers before substantial builds or Testcontainers runs. Do not start heavy monitoring here without additional disk capacity; preserve data volumes and user-owned caches/images.
 
-Phase 6 secures the existing workflows. External email/SMS delivery and advanced fraud detection are not implemented; observability is Phase 7.
+Phase 6 secures the existing workflows. External email/SMS delivery and advanced fraud detection are not implemented; observability is implemented in Phase 7; deployment is Phase 8.
 
 ## Historical Phase 2 verification
 
@@ -276,3 +291,5 @@ Phase 3 is developed on `feat/phase-3-account-service`, based on `feat/phase-2-c
 ## Phase 6 feature branch
 
 `feat/phase-6-security` is based on `feat/phase-5-kafka-integration`. See [security design and startup](docs/phase-6.md) and [verification](docs/phase-6-verification.md). Keycloak credentials remain private in ignored local configuration; no passwords or tokens are committed.
+
+Phase 7 branch: `feat/phase-7-observability`, based on Phase 6. See [verification](docs/phase-7-verification.md).

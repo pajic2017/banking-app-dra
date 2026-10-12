@@ -14,12 +14,14 @@ public class OutboxRelay {
     private final JdbcTemplate jdbc;
     private final KafkaTemplate<String,String> kafka;
     private final Clock clock;
-    public OutboxRelay(JdbcTemplate jdbc,KafkaTemplate<String,String> kafka,Clock clock) {this.jdbc=jdbc;this.kafka=kafka;this.clock=clock;}
+    private final com.bank.observability.DurableTrace trace;
+    public OutboxRelay(JdbcTemplate jdbc,KafkaTemplate<String,String> kafka,Clock clock,com.bank.observability.DurableTrace trace) {this.jdbc=jdbc;this.kafka=kafka;this.clock=clock;this.trace=trace;}
     @Transactional(isolation=Isolation.READ_COMMITTED)
     public boolean publishNext() {
         var rows=jdbc.queryForList("SELECT * FROM event_outbox WHERE status='PENDING' AND next_attempt_at<=? ORDER BY next_attempt_at,created_at,event_id LIMIT 1 FOR UPDATE SKIP LOCKED",Timestamp.from(clock.instant()));
         if(rows.isEmpty())return false;
         var row=rows.get(0);var id=row.get("event_id").toString();
+        try(var scope=trace.resume((String)row.get("traceparent"),"outbox.publish",null)) {
         try { kafka.send(row.get("topic").toString(),row.get("aggregate_id").toString(),row.get("payload").toString()).get(9,TimeUnit.SECONDS); }
         catch(Exception unavailable) {
             if(unavailable instanceof InterruptedException)Thread.currentThread().interrupt();
@@ -29,5 +31,6 @@ public class OutboxRelay {
         // Broker acknowledgement can precede a failed DB commit: replay is safe by stable event ID.
         jdbc.update("UPDATE event_outbox SET status='PUBLISHED',attempts=attempts+1,published_at=? WHERE event_id=?",Timestamp.from(clock.instant()),id);
         return true;
+        }
     }
 }

@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.*;
 @Testcontainers
 @org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
+        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","bank.monitoring.jobs-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
 class AccountApiIntegrationTest {
     @Container static final MySQLContainer<?> MYSQL=new MySQLContainer<>("mysql:8.4").withDatabaseName("accounts");
     static final ExecutorService threads=Executors.newCachedThreadPool();

@@ -31,7 +31,7 @@ public class KafkaConfiguration {
         factory.setCommonErrorHandler(new DefaultErrorHandler(new FixedBackOff(1000,FixedBackOff.UNLIMITED_ATTEMPTS)));return factory;
     }
     private ConcurrentKafkaListenerContainerFactory<Object,Object> base(ConsumerFactory<Object,Object> consumerFactory) {
-        var f=new ConcurrentKafkaListenerContainerFactory<Object,Object>();f.setConsumerFactory(consumerFactory);f.setConcurrency(3);
+        var f=new ConcurrentKafkaListenerContainerFactory<Object,Object>();f.setConsumerFactory(consumerFactory);f.setConcurrency(3);f.getContainerProperties().setObservationEnabled(true);
         f.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);f.getContainerProperties().setSyncCommits(true);return f;
     }
 }

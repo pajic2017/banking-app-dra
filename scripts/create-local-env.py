@@ -9,6 +9,6 @@ with os.fdopen(fd, 'w') as stream:
     for name in ('MYSQL_ROOT_PASSWORD', 'CUSTOMER_DB_PASSWORD', 'ACCOUNT_DB_PASSWORD',
                  'TRANSACTION_DB_PASSWORD', 'AUTH_DB_PASSWORD', 'KEYCLOAK_ADMIN_PASSWORD', 'GRAFANA_ADMIN_PASSWORD', 'CUSTOMER_SERVICE_CLIENT_SECRET', 'ACCOUNT_SERVICE_CLIENT_SECRET',
                  'TRANSACTION_SERVICE_CLIENT_SECRET', 'BANK_ADMIN_PASSWORD', 'BANK_EMPLOYEE_PASSWORD',
-                 'BANK_ALICE_PASSWORD', 'BANK_BOB_PASSWORD', 'BANK_ROLELESS_PASSWORD'):
+                 'BANK_ALICE_PASSWORD', 'BANK_BOB_PASSWORD', 'BANK_ROLELESS_PASSWORD', 'MONITORING_PASSWORD'):
         stream.write(f'{name}={secrets.token_urlsafe(32)}\n')
 print('Created .env with random local credentials; do not commit this file.')

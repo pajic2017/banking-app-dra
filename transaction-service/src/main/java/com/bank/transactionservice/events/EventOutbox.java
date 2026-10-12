@@ -17,7 +17,8 @@ public class EventOutbox {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final Clock clock;
-    public EventOutbox(JdbcTemplate jdbc,ObjectMapper json,Clock clock) { this.jdbc=jdbc;this.json=json;this.clock=clock; }
+    private final com.bank.observability.DurableTrace trace;
+    public EventOutbox(JdbcTemplate jdbc,ObjectMapper json,Clock clock,com.bank.observability.DurableTrace trace) { this.jdbc=jdbc;this.json=json;this.clock=clock;this.trace=trace; }
     public static UUID currentCorrelation() {
         var attributes=RequestContextHolder.getRequestAttributes();
         if(attributes instanceof ServletRequestAttributes servlet && servlet.getRequest().getAttribute("bank.correlationId") instanceof UUID id) return id;
@@ -29,7 +30,7 @@ public class EventOutbox {
         var event=new BankEventV1(UUID.randomUUID(),type,1,correlation,type.producer(),now,aggregate,data);
         String payload;
         try { payload=json.writeValueAsString(event); } catch(JsonProcessingException invalid) { throw new IllegalStateException("Could not serialize event.",invalid); }
-        jdbc.update("INSERT INTO event_outbox(event_id,event_type,aggregate_id,topic,payload,next_attempt_at,created_at) VALUES (?,?,?,?,?,?,?)",
-                event.eventId().toString(),type.name(),aggregate,type.topic(),payload,Timestamp.from(now),Timestamp.from(now));
+        jdbc.update("INSERT INTO event_outbox(event_id,event_type,aggregate_id,topic,payload,next_attempt_at,created_at,traceparent) VALUES (?,?,?,?,?,?,?,?)",
+                event.eventId().toString(),type.name(),aggregate,type.topic(),payload,Timestamp.from(now),Timestamp.from(now),trace.capture());
     }
 }

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.*;
 @Testcontainers
 @org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
-        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false","bank.processing.enabled=false"})
+        "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","bank.monitoring.jobs-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false","bank.processing.enabled=false"})
 class TransactionIntegrationTest {
     @Container static final PostgreSQLContainer<?> POSTGRES=new PostgreSQLContainer<>("postgres:17");
     static final ObjectMapper JSON=new ObjectMapper().findAndRegisterModules();

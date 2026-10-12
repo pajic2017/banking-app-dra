@@ -30,3 +30,42 @@ bank:
     token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8090/realms/banking/protocol/openid-connect/token}
     audience: banking-api
     client-secret: ${SERVICE_CLIENT_SECRET:}
+
+---
+bank:
+  monitoring:
+    password: ${MONITORING_PASSWORD:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:0.1}
+    propagation:
+      type: w3c
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+logging:
+  structured:
+    format:
+      console: ecs
+      file: ecs
+  file:
+    name: ${BANK_LOG_FILE:.run/logs/auth-service.json}
+spring:
+  reactor:
+    context-propagation: auto
+  kafka:
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true

@@ -1,0 +1,13 @@
+filebeat.inputs:
+  - type: filestream
+    id: banking-json
+    paths: [/var/log/bank/*.json]
+    parsers:
+      - ndjson:
+          target: ""
+          add_error_key: true
+          overwrite_keys: true
+          expand_keys: true
+output.logstash:
+  hosts: ["logstash:5044"]
+logging.level: warning

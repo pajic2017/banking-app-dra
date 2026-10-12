@@ -1,0 +1,6 @@
+apiVersion: 1
+providers:
+  - name: Banking
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

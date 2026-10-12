@@ -13,19 +13,21 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class TransactionRepository {
     private final JdbcTemplate jdbc;
+    private final com.bank.observability.DurableTrace trace;
     private final com.bank.transactionservice.events.EventOutbox events;
-    public TransactionRepository(JdbcTemplate jdbc,com.bank.transactionservice.events.EventOutbox events) { this.jdbc = jdbc;this.events=events; }
+    public TransactionRepository(JdbcTemplate jdbc,com.bank.transactionservice.events.EventOutbox events,com.bank.observability.DurableTrace trace) { this.jdbc = jdbc;this.events=events;this.trace=trace; }
 
     public void insert(PostingCommandV1 command, String key, String description, String hash, Instant now) {
         jdbc.update("""
             INSERT INTO transactions(id,transaction_reference,idempotency_key,request_hash,transaction_type,
-                from_account_id,to_account_id,amount,currency,description,next_attempt_at,created_at,updated_at,correlation_id,request_subject)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING
+                from_account_id,to_account_id,amount,currency,description,next_attempt_at,created_at,updated_at,correlation_id,request_subject,traceparent)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING
             """, command.operationId(), "TX-" + command.operationId(), key, hash, command.type().name(),
             command.fromAccountId(), command.toAccountId(), command.amount(), command.currency(), description,
-            Timestamp.from(now), Timestamp.from(now), Timestamp.from(now),com.bank.transactionservice.events.EventOutbox.currentCorrelation(),new com.bank.security.BankAccess().subject());
+            Timestamp.from(now), Timestamp.from(now), Timestamp.from(now),com.bank.transactionservice.events.EventOutbox.currentCorrelation(),new com.bank.security.BankAccess().subject(),trace.capture());
     }
 
+    public String traceparent(UUID id) {return jdbc.queryForObject("SELECT traceparent FROM transactions WHERE id=?",String.class,id);}
     public boolean subjectMatches(String key,String subject) { return Boolean.TRUE.equals(jdbc.queryForObject("SELECT request_subject=? FROM transactions WHERE idempotency_key=?",Boolean.class,subject,key)); }
     public boolean legacyKeyExists(String key) { return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM transactions WHERE idempotency_key=? AND request_subject IS NULL)",Boolean.class,key)); }
     public String requestHash(String key) { return jdbc.queryForObject("SELECT request_hash FROM transactions WHERE idempotency_key=?", String.class, key); }

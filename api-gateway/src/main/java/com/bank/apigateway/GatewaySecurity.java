@@ -14,6 +14,13 @@ import reactor.core.publisher.Mono;
 @Configuration
 @EnableWebFluxSecurity
 public class GatewaySecurity {
+    @Bean @org.springframework.core.annotation.Order(0) SecurityWebFilterChain metrics(ServerHttpSecurity http,@Value("${bank.monitoring.password:}") String secret) {
+        var encoder=new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+        var users=new org.springframework.security.core.userdetails.MapReactiveUserDetailsService(List.of(org.springframework.security.core.userdetails.User.withUsername("monitoring").password(encoder.encode(secret.isBlank()?java.util.UUID.randomUUID().toString():secret)).disabled(secret.isBlank()).roles("MONITORING").build()));
+        var manager=new org.springframework.security.authentication.UserDetailsRepositoryReactiveAuthenticationManager(users);manager.setPasswordEncoder(encoder);
+        return http.securityMatcher(new org.springframework.security.web.server.util.matcher.PathPatternParserServerWebExchangeMatcher("/actuator/prometheus"))
+            .authenticationManager(manager).csrf(ServerHttpSecurity.CsrfSpec::disable).authorizeExchange(a->a.anyExchange().hasRole("MONITORING")).httpBasic(b->{ }).build();
+    }
     @Bean ReactiveJwtDecoder decoder(@Value("${bank.security.issuer}") String issuer,@Value("${bank.security.jwk-set-uri}") String jwks) {
         var decoder=NimbusReactiveJwtDecoder.withJwkSetUri(jwks).build();
         OAuth2TokenValidator<Jwt> audience=jwt -> jwt.getSubject()!=null && !jwt.getSubject().isBlank() && jwt.getSubject().length()<=255 && jwt.getAudience()!=null && jwt.getAudience().contains("banking-api") ? OAuth2TokenValidatorResult.success() : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token"));

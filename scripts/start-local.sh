@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [[ -f .env ]]; then python3 scripts/prepare-security-env.py; fi
+if [[ -f .env ]]; then python3 scripts/prepare-security-env.py; python3 scripts/prepare-monitoring.py; fi
 source scripts/local-customer-env.sh
 source scripts/local-account-env.sh
 source scripts/local-transaction-env.sh

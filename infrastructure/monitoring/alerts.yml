@@ -1,0 +1,23 @@
+groups:
+  - name: banking
+    rules:
+      - alert: BankServiceDown
+        expr: up{job="banking"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Bank service scrape unavailable"}
+      - alert: BankOutboxDelayed
+        expr: bank_outbox_oldest_seconds > 60
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: "Pending bank events exceed 60 seconds"}
+      - alert: BankServerErrors
+        expr: sum by(application)(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) > 0.1
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "Elevated server error rate"}
+      - alert: BankBacklogMetricsUnavailable
+        expr: bank_outbox_pending < 0
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: "Outbox metric collection unavailable"}

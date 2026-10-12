@@ -8,7 +8,13 @@ services:
         SERVICE: discovery-server
     ports:
       - "127.0.0.1:8761:8761"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/discovery-server.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     healthcheck:
@@ -27,11 +33,16 @@ services:
     ports:
       - "127.0.0.1:8888:8888"
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/config-server.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
       CONFIG_REPO: file:/config/
     volumes:
       - ./infrastructure/config:/config:ro
+      - bank-logs:/var/log/bank
     depends_on:
       discovery-server:
         condition: service_healthy
@@ -50,7 +61,13 @@ services:
         SERVICE: api-gateway
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/api-gateway.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
       KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
@@ -76,7 +93,13 @@ services:
         SERVICE: auth-service
     ports:
       - "127.0.0.1:8081:8081"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/auth-service.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
       KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
@@ -102,7 +125,13 @@ services:
         SERVICE: customer-service
     ports:
       - "127.0.0.1:8082:8082"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/customer-service.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       SERVICE_CLIENT_SECRET: ${CUSTOMER_SERVICE_CLIENT_SECRET:?Run scripts/prepare-security-env.py}
       KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
@@ -136,7 +165,13 @@ services:
         SERVICE: account-service
     ports:
       - "127.0.0.1:8083:8083"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/account-service.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       SERVICE_CLIENT_SECRET: ${ACCOUNT_SERVICE_CLIENT_SECRET:?Run scripts/prepare-security-env.py}
       KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
@@ -172,7 +207,13 @@ services:
         SERVICE: transaction-service
     ports:
       - "127.0.0.1:8084:8084"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/transaction-service.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       SERVICE_CLIENT_SECRET: ${TRANSACTION_SERVICE_CLIENT_SECRET:?Run scripts/prepare-security-env.py}
       KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
@@ -208,7 +249,13 @@ services:
         SERVICE: notification-service
     ports:
       - "127.0.0.1:8085:8085"
+    volumes:
+      - bank-logs:/var/log/bank
     environment:
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:?Run scripts/prepare-monitoring.py}
+      BANK_LOG_FILE: /var/log/bank/notification-service.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      TRACING_SAMPLE_RATE: ${TRACING_SAMPLE_RATE:-0.1}
       KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
       KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
@@ -349,19 +396,82 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     profiles: [monitoring]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d", "--storage.tsdb.retention.size=1GB"]
     volumes:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./.run/monitoring/prometheus-password:/etc/prometheus/password:ro
+      - prometheus-data:/prometheus
     ports: ["127.0.0.1:9090:9090"]
   grafana:
     image: grafana/grafana:12.1.1
+    profiles: [monitoring]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Generate .env first}
-    profiles: [monitoring]
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infrastructure/monitoring/grafana:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
     ports: ["127.0.0.1:3000:3000"]
   zipkin:
     image: openzipkin/zipkin:3.5
+    environment:
+      MEM_MAX_SPANS: 10000
     profiles: [monitoring]
     ports: ["127.0.0.1:9411:9411"]
+    mem_limit: 512m
+  elasticsearch:
+    image: elasticsearch:8.17.6
+    profiles: [monitoring]
+    environment:
+      discovery.type: single-node
+      cluster.routing.allocation.disk.watermark.low: 1gb
+      cluster.routing.allocation.disk.watermark.high: 768mb
+      cluster.routing.allocation.disk.watermark.flood_stage: 512mb
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms384m -Xmx384m
+    volumes: ["elasticsearch-data:/usr/share/elasticsearch/data"]
+    ports: ["127.0.0.1:9200:9200"]
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  logstash:
+    image: logstash:8.17.6
+    profiles: [monitoring]
+    environment:
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+      XPACK_MONITORING_ENABLED: "false"
+    volumes:
+      - ./infrastructure/monitoring/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    mem_limit: 768m
+  filebeat:
+    image: elastic/filebeat:8.17.6
+    profiles: [monitoring]
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./infrastructure/monitoring/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - bank-logs:/var/log/bank:ro
+      - filebeat-data:/usr/share/filebeat/data
+    depends_on: [logstash]
+    mem_limit: 256m
+  kibana:
+    image: kibana:8.17.6
+    profiles: [monitoring]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      XPACK_SECURITY_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+      NODE_OPTIONS: --max-old-space-size=512
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    ports: ["127.0.0.1:5601:5601"]
+    mem_limit: 1g
+
 volumes:
   customer-db:
   account-db:
@@ -370,3 +480,8 @@ volumes:
   notification-db:
   kafka-data:
   keycloak-data:
+  bank-logs:
+  prometheus-data:
+  grafana-data:
+  elasticsearch-data:
+  filebeat-data:

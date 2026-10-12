@@ -11,5 +11,5 @@ public class PostingController {
     private final PostingService postings;
     public PostingController(PostingService postings) { this.postings = postings; }
     @PostMapping
-    public PostingResultV1 post(@RequestBody PostingCommandV1 command) { return postings.post(command); }
+    public PostingResultV1 post(@RequestBody PostingCommandV1 command) { var result=postings.post(command);org.slf4j.LoggerFactory.getLogger(PostingController.class).info("Posting result operationId={} status={}",result.operationId(),result.status());return result; }
 }
