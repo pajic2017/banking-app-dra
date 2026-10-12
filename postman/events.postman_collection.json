@@ -1,0 +1,1007 @@
+{
+  "info": {
+    "name": "Banking Phase 5 \u2014 events and notifications",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Development workflow: monetary lifecycle, nine correlated notifications and retained dead-letter inspection. Drains and closes synthetic accounts."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/customers",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"PostmanMoney\",\n  \"lastName\": \"Test\",\n  \"email\": \"money-{{runId}}@example.com\",\n  \"phone\": \"+38761123456\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('customerId',pm.response.json().id);"
+            ]
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('runId',pm.variables.replaceIn('{{$guid}}'));",
+              "pm.collectionVariables.set('pollCount',0);",
+              "pm.collectionVariables.set('eventCorrelation',pm.variables.replaceIn('{{$guid}}'));",
+              "pm.collectionVariables.set('eventPoll',0);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create current account",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/accounts",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"accountType\": \"CURRENT\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('fromId',pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create savings account",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/accounts",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"accountType\": \"SAVINGS\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('toId',pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fund account",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "fund-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/deposit",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{fromId}}\",\n  \"amount\": \"100.00\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('fundingId',pm.response.json().id);",
+              "pm.test('Durable pending request', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll Fund account",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/{{fundingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json();",
+              "if(r.status==='PENDING'){const n=Number(pm.collectionVariables.get('pollCount')||0)+1;pm.collectionVariables.set('pollCount',n);",
+              "if(n<=100){pm.execution.setNextRequest('Poll Fund account');}else{pm.test('Polling deadline',()=>pm.expect.fail('Command stayed PENDING'));pm.execution.setNextRequest(null);}",
+              "}else{pm.collectionVariables.set('pollCount',0);pm.test('Terminal status',()=>pm.expect(r.status).to.eql('COMPLETED'));}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "transfer-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transfers",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fromAccountId\": \"{{fromId}}\",\n  \"toAccountId\": \"{{toId}}\",\n  \"amount\": \"30.00\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('transferId',pm.response.json().id);",
+              "pm.test('Durable pending request', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll Transfer",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/{{transferId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json();",
+              "if(r.status==='PENDING'){const n=Number(pm.collectionVariables.get('pollCount')||0)+1;pm.collectionVariables.set('pollCount',n);",
+              "if(n<=100){pm.execution.setNextRequest('Poll Transfer');}else{pm.test('Polling deadline',()=>pm.expect.fail('Command stayed PENDING'));pm.execution.setNextRequest(null);}",
+              "}else{pm.collectionVariables.set('pollCount',0);pm.test('Terminal status',()=>pm.expect(r.status).to.eql('COMPLETED'));}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Withdraw",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "withdraw-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/withdraw",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{toId}}\",\n  \"amount\": \"10.00\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('withdrawId',pm.response.json().id);",
+              "pm.test('Durable pending request', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll Withdraw",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/{{withdrawId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json();",
+              "if(r.status==='PENDING'){const n=Number(pm.collectionVariables.get('pollCount')||0)+1;pm.collectionVariables.set('pollCount',n);",
+              "if(n<=100){pm.execution.setNextRequest('Poll Withdraw');}else{pm.test('Polling deadline',()=>pm.expect.fail('Command stayed PENDING'));pm.execution.setNextRequest(null);}",
+              "}else{pm.collectionVariables.set('pollCount',0);pm.test('Terminal status',()=>pm.expect(r.status).to.eql('COMPLETED'));}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Replay funding",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "fund-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/deposit",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{fromId}}\",\n  \"amount\": \"100\",\n  \"currency\": \"bam\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Same transaction',()=>pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('fundingId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reject conflicting key",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "fund-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/deposit",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{fromId}}\",\n  \"amount\": \"101\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Source balance",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/accounts/{{fromId}}/balance"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Expected balance',()=>pm.expect(pm.response.json().balance).to.eql(70));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Target balance",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/accounts/{{toId}}/balance"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Expected balance',()=>pm.expect(pm.response.json().balance).to.eql(20));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Insufficient funds",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "rejected-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/withdraw",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{toId}}\",\n  \"amount\": \"21\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('rejectedId',pm.response.json().id);",
+              "pm.test('Durable pending request', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll Insufficient funds",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/{{rejectedId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json();",
+              "if(r.status==='PENDING'){const n=Number(pm.collectionVariables.get('pollCount')||0)+1;pm.collectionVariables.set('pollCount',n);",
+              "if(n<=100){pm.execution.setNextRequest('Poll Insufficient funds');}else{pm.test('Polling deadline',()=>pm.expect.fail('Command stayed PENDING'));pm.execution.setNextRequest(null);}",
+              "}else{pm.collectionVariables.set('pollCount',0);pm.test('Terminal status',()=>pm.expect(r.status).to.eql('REJECTED'));}",
+              "if(pm.response.json().status==='REJECTED'){pm.test('Insufficient funds code',()=>pm.expect(pm.response.json().failureCode).to.eql('INSUFFICIENT_FUNDS'));}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reject excess precision",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "precision-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/deposit",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{fromId}}\",\n  \"amount\": \"0.001\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Account history",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/account/{{fromId}}?size=20"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Two successful source requests',()=>pm.expect(pm.response.json().totalElements).to.eql(2));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer overview",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/customers/{{customerId}}/accounts"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Two accounts',()=>pm.expect(pm.response.json().totalElements).to.eql(2));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drain source",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "cleanup-fromId-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/withdraw",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{fromId}}\",\n  \"amount\": \"70\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('drainAId',pm.response.json().id);",
+              "pm.test('Durable pending request', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll Drain source",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/{{drainAId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json();",
+              "if(r.status==='PENDING'){const n=Number(pm.collectionVariables.get('pollCount')||0)+1;pm.collectionVariables.set('pollCount',n);",
+              "if(n<=100){pm.execution.setNextRequest('Poll Drain source');}else{pm.test('Polling deadline',()=>pm.expect.fail('Command stayed PENDING'));pm.execution.setNextRequest(null);}",
+              "}else{pm.collectionVariables.set('pollCount',0);pm.test('Terminal status',()=>pm.expect(r.status).to.eql('COMPLETED'));}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Close fromId",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/accounts/{{fromId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"CLOSED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Closed zero account',()=>{pm.expect(pm.response.json().status).to.eql('CLOSED');pm.expect(pm.response.json().balance).to.eql(0);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drain target",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "cleanup-toId-{{runId}}"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/withdraw",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accountId\": \"{{toId}}\",\n  \"amount\": \"20\",\n  \"currency\": \"BAM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "pm.collectionVariables.set('drainBId',pm.response.json().id);",
+              "pm.test('Durable pending request', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll Drain target",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/transactions/{{drainBId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json();",
+              "if(r.status==='PENDING'){const n=Number(pm.collectionVariables.get('pollCount')||0)+1;pm.collectionVariables.set('pollCount',n);",
+              "if(n<=100){pm.execution.setNextRequest('Poll Drain target');}else{pm.test('Polling deadline',()=>pm.expect.fail('Command stayed PENDING'));pm.execution.setNextRequest(null);}",
+              "}else{pm.collectionVariables.set('pollCount',0);pm.test('Terminal status',()=>pm.expect(r.status).to.eql('COMPLETED'));}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Close toId",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/accounts/{{toId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"CLOSED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Closed zero account',()=>{pm.expect(pm.response.json().status).to.eql('CLOSED');pm.expect(pm.response.json().balance).to.eql(0);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deactivate synthetic customer",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Correlation-ID",
+            "value": "{{eventCorrelation}}"
+          }
+        ],
+        "url": "{{baseUrl}}/customers/{{customerId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Poll correlated notifications",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/notifications?correlationId={{eventCorrelation}}&size=100"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "const rows=pm.response.json().items;",
+              "if(rows.length<9){const n=Number(pm.collectionVariables.get('eventPoll')||0)+1;pm.collectionVariables.set('eventPoll',n);if(n<100)pm.execution.setNextRequest('Poll correlated notifications');else pm.test('Notifications arrive',()=>pm.expect(rows.length).to.eql(9));}",
+              "else {pm.test('Nine unique correlated notifications',()=>{pm.expect(rows.length).to.eql(9);pm.expect(new Set(rows.map(r=>r.id)).size).to.eql(9);rows.forEach(r=>{pm.expect(r.event.correlationId).to.eql(pm.collectionVariables.get('eventCorrelation'));pm.expect(r.event.version).to.eql(1);});});",
+              "const counts={};rows.forEach(r=>counts[r.event.eventType]=(counts[r.event.eventType]||0)+1);pm.test('Expected business outcomes',()=>pm.expect(counts).to.deep.eql({CUSTOMER_CREATED:1,ACCOUNT_CREATED:2,TRANSACTION_COMPLETED:5,TRANSACTION_FAILED:1}));pm.collectionVariables.set('notificationId',rows[0].id);}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Read stored notification",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/notifications/{{notificationId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Stored notification',()=>{pm.response.to.have.status(200);pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('notificationId'));});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inspect retained dead letters",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/notifications/dead-letters?size=1"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Quarantine page available',()=>{pm.response.to.have.status(200);pm.expect(pm.response.json().items).to.be.an('array');});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  }
+}

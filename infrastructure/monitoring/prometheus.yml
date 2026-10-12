@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+rule_files: [/etc/prometheus/alerts.yml]
+scrape_configs:
+  - job_name: banking
+    metrics_path: /actuator/prometheus
+    basic_auth:
+      username: monitoring
+      password_file: /etc/prometheus/password
+    static_configs:
+      - targets: ["api-gateway:8080"]
+        labels: {application: "api-gateway"}
+      - targets: ["auth-service:8081"]
+        labels: {application: "auth-service"}
+      - targets: ["customer-service:8082"]
+        labels: {application: "customer-service"}
+      - targets: ["account-service:8083"]
+        labels: {application: "account-service"}
+      - targets: ["transaction-service:8084"]
+        labels: {application: "transaction-service"}
+      - targets: ["notification-service:8085"]
+        labels: {application: "notification-service"}
+      - targets: ["config-server:8888"]
+        labels: {application: "config-server"}
+      - targets: ["discovery-server:8761"]
+        labels: {application: "discovery-server"}

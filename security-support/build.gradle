@@ -1,0 +1,9 @@
+plugins { id 'java-library'; id 'java-test-fixtures' }
+tasks.named('bootJar') { enabled = false }
+tasks.named('jar') { enabled = true }
+dependencies {
+    api 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    testFixturesImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testFixturesImplementation 'org.springframework.boot:spring-boot-test'
+}

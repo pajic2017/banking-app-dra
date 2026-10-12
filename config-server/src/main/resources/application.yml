@@ -1,0 +1,68 @@
+server:
+  port: ${PORT:8888}
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      enabled: false
+      server:
+        native:
+          search-locations: "${CONFIG_REPO:file:./infrastructure/config/}"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+
+---
+bank:
+  monitoring:
+    password: ${MONITORING_PASSWORD:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:0.1}
+    propagation:
+      type: w3c
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+logging:
+  structured:
+    format:
+      console: ecs
+      file: ecs
+  file:
+    name: ${BANK_LOG_FILE:.run/logs/config-server.json}
+spring:
+  reactor:
+    context-propagation: auto
+  kafka:
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
