@@ -21,3 +21,12 @@ eureka:
   instance:
     prefer-ip-address: true
     lease-renewal-interval-in-seconds: 5
+
+---
+bank:
+  security:
+    issuer: ${KEYCLOAK_ISSUER:http://localhost:8090/realms/banking}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8090/realms/banking/protocol/openid-connect/certs}
+    token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8090/realms/banking/protocol/openid-connect/token}
+    audience: banking-api
+    client-secret: ${SERVICE_CLIENT_SECRET:}

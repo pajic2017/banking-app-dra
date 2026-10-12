@@ -21,6 +21,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.*;
 import static org.assertj.core.api.Assertions.*;
 @Testcontainers
+@org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
         "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
 class AccountApiIntegrationTest {
@@ -32,8 +33,8 @@ class AccountApiIntegrationTest {
         try {
             customer=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
             customer.setExecutor(threads);
-            customer.createContext("/customers/",exchange->{
-                var id=exchange.getRequestURI().getPath().substring("/customers/".length());
+            customer.createContext("/internal/v1/customers/",exchange->{
+                var id=exchange.getRequestURI().getPath().substring("/internal/v1/customers/".length()).replace("/status", "");
                 int status=200;
                 String body="{\"id\":"+id+",\"status\":\""+mode+"\"}";
                 if (mode.equals("MISSING")) { status=404;body="{}"; }
@@ -52,6 +53,8 @@ class AccountApiIntegrationTest {
     }
     @AfterAll static void shutdown() {customer.stop(0);threads.shutdownNow();}
     @Autowired TestRestTemplate rest;
+    @BeforeEach void authenticatedRequests() { rest.getRestTemplate().setInterceptors(java.util.List.of((request,body,execution) -> { if(!request.getHeaders().containsKey("Authorization"))request.getHeaders().setBearerAuth("admin");return execution.execute(request,body); })); }
+
     @Autowired AccountRepository repository;
     @Autowired JdbcTemplate jdbc;
     @BeforeEach void reset() {mode="ACTIVE";jdbc.update("DELETE FROM event_outbox");repository.deleteAllInBatch();}
@@ -130,6 +133,26 @@ class AccountApiIntegrationTest {
         } finally {jdbc.execute("ALTER TABLE event_outbox DROP CHECK injected_capture_failure");}
         assertThat(repository.count()).isZero();assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_outbox",Integer.class)).isZero();
         create(41L,AccountType.CURRENT,"BAM");assertThat(jdbc.queryForObject("SELECT event_type FROM event_outbox",String.class)).isEqualTo("ACCOUNT_CREATED");
+    }
+
+
+    @Test void ownershipProtectsAccountBalanceCustomerListAndAdministrativeChanges() {
+        var own=create(41,AccountType.CURRENT,"BAM");var other=create(42,AccountType.CURRENT,"BAM");
+        var headers=new HttpHeaders();headers.setBearerAuth("customer-41");
+        assertThat(rest.exchange("/accounts/"+own.id()+"/balance",HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(rest.exchange("/accounts/"+other.id(),HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(rest.exchange("/accounts/"+other.id()+"/balance",HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(rest.exchange("/accounts/customer/42",HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(rest.exchange("/accounts/"+own.id()+"/status",HttpMethod.PATCH,new HttpEntity<>(Map.of("status","CLOSED"),headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(rest.postForEntity("/accounts",new HttpEntity<>(new CreateAccountRequest(41L,AccountType.SAVINGS,"BAM"),headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+    @Test void internalPostingRejectsHumanRolesAndWrongServiceBeforeMutation() {
+        var command=new com.bank.contracts.posting.v1.PostingCommandV1(java.util.UUID.randomUUID(),com.bank.contracts.posting.v1.PostingType.DEPOSIT,null,1L,new java.math.BigDecimal("1"),"BAM");
+        for(String identity:java.util.List.of("admin","employee","customer-41","account-service","customer-service")) {
+            var headers=new HttpHeaders();headers.setBearerAuth(identity);
+            assertThat(rest.postForEntity("/internal/v1/postings",new HttpEntity<>(command,headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM posting_receipts",Integer.class)).isZero();
     }
 
 }

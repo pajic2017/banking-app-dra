@@ -1,6 +1,7 @@
 package com.bank.accountservice.api;
 import com.bank.accountservice.service.LedgerReconciliation;
 import org.springframework.web.bind.annotation.*;
+@org.springframework.security.access.prepost.PreAuthorize("@access.admin()")
 @RestController
 public class ReconciliationController {
     private final LedgerReconciliation ledger;

@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.*;
 import static org.assertj.core.api.Assertions.*;
 
 @Testcontainers
+@org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
         "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false","bank.processing.enabled=false"})
 class TransactionIntegrationTest {
@@ -51,6 +52,11 @@ class TransactionIntegrationTest {
                     }
                     exchange.getResponseHeaders().add("Content-Type","application/json");exchange.sendResponseHeaders(status,body.length);exchange.getResponseBody().write(body);
                 } finally {exchange.close();}
+            });
+            account.createContext("/accounts/",exchange -> {
+                var id=exchange.getRequestURI().getPath().substring("/accounts/".length());
+                var bytes=("{\"id\":"+id+",\"customerId\":"+id+"}").getBytes();
+                exchange.getResponseHeaders().set("Content-Type","application/json");exchange.sendResponseHeaders(200,bytes.length);exchange.getResponseBody().write(bytes);exchange.close();
             });account.start();
         } catch(java.io.IOException error){throw new ExceptionInInitializerError(error);}
     }
@@ -62,6 +68,8 @@ class TransactionIntegrationTest {
     @Autowired TransactionService service;
     @Autowired TransactionProcessor processor;
     @Autowired TestRestTemplate rest;
+    @BeforeEach void authenticatedRequests() { rest.getRestTemplate().setInterceptors(java.util.List.of((request,body,execution) -> { if(!request.getHeaders().containsKey("Authorization"))request.getHeaders().setBearerAuth("admin");return execution.execute(request,body); })); }
+
     @Autowired JdbcTemplate jdbc;
     @BeforeEach void reset(){jdbc.update("DELETE FROM event_outbox");jdbc.update("DELETE FROM transactions");receipts.clear();applications.set(0);mode="COMPLETED";}
     private TransactionView submit(String key){return service.submit(key,PostingType.DEPOSIT,null,1L,new BigDecimal("10"),"BAM","test");}
@@ -87,7 +95,8 @@ class TransactionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM transactions",Integer.class)).isEqualTo(1);
     }
     @Test void conflictingKeyPayloadIs409() {
-        var row=submit("same-key");var headers=new HttpHeaders();headers.set("Idempotency-Key","same-key");
+        var headers=new HttpHeaders();headers.set("Idempotency-Key","same-key");
+        var row=rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("10"),"BAM","test"),headers),TransactionView.class).getBody();
         assertThat(rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("11"),"BAM","test"),headers),Map.class).getStatusCode().value()).isEqualTo(409);
         assertThat(service.get(row.id()).amount()).isEqualByComparingTo("10");
     }
@@ -170,4 +179,42 @@ class TransactionIntegrationTest {
         h.set("X-Correlation-ID","invalid");assertThat(rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("10"),"BAM",""),h),Map.class).getStatusCode().value()).isEqualTo(400);
     }
 
+
+    @Test void customerNeedsSourceOwnershipAndCannotDepositOrSearchGlobally() {
+        var headers=new HttpHeaders();headers.setBearerAuth("customer-1");headers.set("Idempotency-Key","owned-withdraw");
+        var own=rest.postForEntity("/transactions/withdraw",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("1"),"BAM",""),headers),TransactionView.class);
+        assertThat(own.getStatusCode().value()).isEqualTo(202);
+        headers.set("Idempotency-Key","other-withdraw");
+        assertThat(rest.postForEntity("/transactions/withdraw",new HttpEntity<>(new MoneyRequest(2L,new BigDecimal("1"),"BAM",""),headers),Map.class).getStatusCode().value()).isEqualTo(403);
+        assertThat(rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("1"),"BAM",""),headers),Map.class).getStatusCode().value()).isEqualTo(403);
+        assertThat(rest.exchange("/transactions",HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode().value()).isEqualTo(403);
+        assertThat(rest.exchange("/transactions/account/2",HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode().value()).isEqualTo(403);
+        var bob=new HttpHeaders();bob.setBearerAuth("customer-2");
+        assertThat(rest.exchange("/transactions/"+own.getBody().id(),HttpMethod.GET,new HttpEntity<>(bob),Map.class).getStatusCode().value()).isEqualTo(403);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM transactions",Integer.class)).isEqualTo(1);
+    }
+    @Test void sameRawIdempotencyKeyIsScopedToAuthenticatedSubject() {
+        var admin=new HttpHeaders();admin.setBearerAuth("admin");admin.set("Idempotency-Key","actor-local");
+        var employee=new HttpHeaders();employee.setBearerAuth("employee");employee.set("Idempotency-Key","actor-local");
+        var body=new MoneyRequest(1L,new BigDecimal("1"),"BAM","");
+        var first=rest.postForEntity("/transactions/deposit",new HttpEntity<>(body,admin),TransactionView.class).getBody();
+        var second=rest.postForEntity("/transactions/deposit",new HttpEntity<>(body,employee),TransactionView.class).getBody();
+        assertThat(first.id()).isNotEqualTo(second.id());
+        assertThat(rest.postForEntity("/transactions/deposit",new HttpEntity<>(body,admin),TransactionView.class).getBody().id()).isEqualTo(first.id());
+    }
+
+    @Test void legacyUnboundKeyCannotSilentlyBecomeANewMonetaryCommand() {
+        var original=submit("legacy-key");var headers=new HttpHeaders();headers.set("Idempotency-Key","legacy-key");
+        var response=rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("10"),"BAM","test"),headers),Map.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM transactions",Integer.class)).isEqualTo(1);
+        assertThat(service.get(original.id()).status()).isEqualTo(TransactionStatus.PENDING);
+    }
+    @Test void legacyRecordImitatingNewNamespaceStillRequiresActorProvenance() {
+        var scoped="P6-"+PostingCommandV1.hash("http://localhost:8090/realms/banking|admin|reserved-key");submit(scoped);
+        var headers=new HttpHeaders();headers.set("Idempotency-Key","reserved-key");
+        var response=rest.postForEntity("/transactions/deposit",new HttpEntity<>(new MoneyRequest(1L,new BigDecimal("10"),"BAM","test"),headers),Map.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM transactions",Integer.class)).isEqualTo(1);
+    }
 }

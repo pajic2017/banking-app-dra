@@ -13,3 +13,5 @@ dependencies {
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:mysql'
 }
+
+dependencies { implementation project(':security-support'); testImplementation testFixtures(project(':security-support')); testImplementation 'org.springframework.security:spring-security-test' }

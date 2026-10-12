@@ -10,6 +10,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+@org.springframework.security.access.prepost.PreAuthorize("@access.admin()")
 @RestController
 @Validated
 @RequestMapping("/notifications")

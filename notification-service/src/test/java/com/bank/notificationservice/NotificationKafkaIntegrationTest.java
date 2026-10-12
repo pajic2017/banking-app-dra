@@ -31,6 +31,7 @@ import static org.mockito.Mockito.*;
 import static com.mongodb.client.model.Filters.eq;
 
 @Testcontainers
+@org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
         "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
 class NotificationKafkaIntegrationTest {
@@ -45,6 +46,8 @@ class NotificationKafkaIntegrationTest {
     @Autowired MongoTemplate mongo;
     @Autowired KafkaListenerEndpointRegistry registry;
     @Autowired TestRestTemplate rest;
+    @BeforeEach void authenticatedRequests() { rest.getRestTemplate().setInterceptors(java.util.List.of((request,body,execution) -> { if(!request.getHeaders().containsKey("Authorization"))request.getHeaders().setBearerAuth("admin");return execution.execute(request,body); })); }
+
     @MockitoSpyBean NotificationStore notifications;
 
     private BankEventV1 customer() {return event(EventType.CUSTOMER_CREATED,"1",Map.of("customerId","1"));}

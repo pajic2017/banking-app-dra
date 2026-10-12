@@ -21,6 +21,7 @@ import org.testcontainers.junit.jupiter.*;
 import static org.assertj.core.api.Assertions.*;
 
 @Testcontainers
+@org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "CONFIG_IMPORT=optional:classpath:/no-config-client.yml", "bank.events.relay-enabled=false","spring.cloud.config.enabled=false",
         "eureka.client.enabled=false"})
@@ -33,6 +34,8 @@ class CustomerApiIntegrationTest {
     }
 
     @Autowired TestRestTemplate rest;
+    @BeforeEach void authenticatedRequests() { rest.getRestTemplate().setInterceptors(java.util.List.of((request,body,execution) -> { if(!request.getHeaders().containsKey("Authorization"))request.getHeaders().setBearerAuth("admin");return execution.execute(request,body); })); }
+
     @Autowired CustomerRepository repository;
     @Autowired JdbcTemplate jdbc;
     @Autowired com.bank.customerservice.events.OutboxRelay relay;
@@ -223,6 +226,26 @@ class CustomerApiIntegrationTest {
         var payload=org.mockito.ArgumentCaptor.forClass(String.class);
         org.mockito.Mockito.verify(kafka,org.mockito.Mockito.times(2)).send(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),payload.capture());
         assertThat(payload.getAllValues().get(0)).isEqualTo(payload.getAllValues().get(1));
+    }
+
+
+    @Test void customersCannotReadOrUpdateOthersAndCannotListOrCreate() {
+        var own=create("owner@example.com").getBody();var other=create("other@example.com").getBody();
+        var headers=new HttpHeaders();headers.setBearerAuth("customer-"+own.id());
+        assertThat(rest.exchange("/customers/"+own.id(),HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(rest.exchange("/customers/"+other.id(),HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(rest.exchange("/customers/"+other.id(),HttpMethod.PUT,new HttpEntity<>(new CustomerRequest("Changed","Name","changed@example.com","+38761123456"),headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(service.get(other.id()).email()).isEqualTo("other@example.com");
+        assertThat(rest.exchange("/customers",HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(rest.postForEntity("/customers",new HttpEntity<>(new CustomerRequest("New","Name","new@example.com","+38761123456"),headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+    @Test void humanAdminCannotUseInternalStatusAndServiceDoesNotExposeContactData() {
+        var row=create("internal@example.com").getBody();String path="/internal/v1/customers/"+row.id()+"/status";
+        assertThat(rest.getForEntity(path,Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        var headers=new HttpHeaders();headers.setBearerAuth("account-service");
+        var response=rest.exchange(path,HttpMethod.GET,new HttpEntity<>(headers),Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);assertThat(response.getBody().keySet()).containsExactlyInAnyOrder("id","status");
+        assertThat(rest.exchange("/customers/"+row.id(),HttpMethod.GET,new HttpEntity<>(headers),Map.class).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
 }

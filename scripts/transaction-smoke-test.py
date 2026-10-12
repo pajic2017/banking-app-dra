@@ -2,6 +2,7 @@
 """Verify real monetary APIs; uses only synthetic development data and retains closed accounts."""
 import concurrent.futures
 import json
+from local_oidc import admin_token
 import time
 import uuid
 import urllib.error
@@ -14,6 +15,7 @@ base = 'http://localhost:8080/api'
 def request(method, path, payload=None, expected=(200,), key=None):
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+    headers['Authorization'] = 'Bearer '+admin_token()
     if key:
         headers['Idempotency-Key'] = key
     try:
@@ -89,7 +91,7 @@ history = request('GET', f'/transactions/account/{a}?size=100')[0]
 assert history['totalElements'] == 24 and len(history['items']) == 24
 assert request('GET', f'/customers/{cid}/accounts')[0]['totalElements'] == 2
 
-with urllib.request.urlopen('http://localhost:8083/internal/v1/ledger/reconciliation?currency=BAM') as response:
+with urllib.request.urlopen(urllib.request.Request('http://localhost:8083/internal/v1/ledger/reconciliation?currency=BAM',headers={'Authorization':'Bearer '+admin_token()})) as response:
     report = json.load(response, parse_float=Decimal)
 assert report['balanced'] and report['accountMismatches'] == 0 and report['invalidPostings'] == 0, report
 for aid, amount in [(a, '46'), (b, '50')]:

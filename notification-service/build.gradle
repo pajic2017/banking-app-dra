@@ -11,3 +11,5 @@ dependencies {
     testImplementation 'org.testcontainers:kafka'
     testImplementation 'org.testcontainers:mongodb'
 }
+
+dependencies { implementation project(':security-support'); testImplementation testFixtures(project(':security-support')); testImplementation 'org.springframework.security:spring-security-test' }

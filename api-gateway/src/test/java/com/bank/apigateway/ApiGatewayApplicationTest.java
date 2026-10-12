@@ -14,4 +14,14 @@ class ApiGatewayApplicationTest {
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("UP");
     }
+    @Test void missingBearerCannotReachBusinessRoute() {
+        var response=rest.getForEntity("/api/customers/1",String.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("Authentication required");
+    }
+    @Test void malformedBearerIsRejectedByReactiveDecoder() {
+        var headers=new org.springframework.http.HttpHeaders();headers.setBearerAuth("not-a-jwt");
+        var response=rest.exchange("/api/accounts/1",org.springframework.http.HttpMethod.GET,new org.springframework.http.HttpEntity<>(headers),String.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+    }
 }

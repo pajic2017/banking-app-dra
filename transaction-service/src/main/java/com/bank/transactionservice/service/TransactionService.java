@@ -18,6 +18,15 @@ public class TransactionService {
     public TransactionService(TransactionRepository repository, Clock clock) { this.repository = repository; this.clock = clock; }
 
     @Transactional
+    public TransactionView submitAuthenticated(String key,PostingType type,Long from,Long to,BigDecimal amount,String currency,String description) {
+        if(repository.legacyKeyExists(key))throw new TransactionFailure(HttpStatus.CONFLICT,"Legacy idempotency key has no verified caller binding; review the existing transaction before issuing a new key.");
+        var access=new com.bank.security.BankAccess();var scoped=access.scopedKey(key);
+        var result=submit(scoped,type,from,to,amount,currency,description);
+        if(!repository.subjectMatches(scoped,access.subject()))throw new TransactionFailure(HttpStatus.CONFLICT,"Idempotency key has no matching verified caller binding.");
+        return result;
+    }
+
+    @Transactional
     public TransactionView submit(String key, PostingType type, Long from, Long to, BigDecimal amount, String currency, String description) {
         var command = new PostingCommandV1(UUID.randomUUID(), type, from, to, amount, currency);
         description = description == null ? "" : description.trim();

@@ -51,6 +51,9 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
@@ -74,6 +77,9 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
     environment:
+      KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
     depends_on:
@@ -97,6 +103,10 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     environment:
+      SERVICE_CLIENT_SECRET: ${CUSTOMER_SERVICE_CLIENT_SECRET:?Run scripts/prepare-security-env.py}
+      KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL: http://account-service:8083
       CUSTOMER_DB_URL: jdbc:mysql://customer-db:3306/customers?connectionTimeZone=UTC
@@ -127,6 +137,10 @@ services:
     ports:
       - "127.0.0.1:8083:8083"
     environment:
+      SERVICE_CLIENT_SECRET: ${ACCOUNT_SERVICE_CLIENT_SECRET:?Run scripts/prepare-security-env.py}
+      KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_DB_URL: jdbc:mysql://account-db:3306/accounts?connectionTimeZone=UTC
       ACCOUNT_DB_USER: account
@@ -159,6 +173,10 @@ services:
     ports:
       - "127.0.0.1:8084:8084"
     environment:
+      SERVICE_CLIENT_SECRET: ${TRANSACTION_SERVICE_CLIENT_SECRET:?Run scripts/prepare-security-env.py}
+      KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ACCOUNT_SERVICE_URL: http://account-service:8083
       TRANSACTION_DB_URL: jdbc:postgresql://transaction-db:5432/transactions
@@ -191,6 +209,9 @@ services:
     ports:
       - "127.0.0.1:8085:8085"
     environment:
+      KEYCLOAK_ISSUER: http://localhost:8090/realms/banking
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/certs
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/banking/protocol/openid-connect/token
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       NOTIFICATION_MONGO_URI: mongodb://notification-db:27017/notifications?retryWrites=false&w=majority&journal=true&serverSelectionTimeoutMS=2000&connectTimeoutMS=2000&socketTimeoutMS=3000&wtimeoutMS=3000
       CONFIG_SERVER_URL: http://config-server:8888
@@ -314,6 +335,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Generate .env first}
       KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: http://localhost:8090
     ports:
       - "127.0.0.1:8090:8080"
     volumes:

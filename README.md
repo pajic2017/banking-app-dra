@@ -1,9 +1,9 @@
-# Banking microservices — Phase 5
+# Banking microservices — Phase 6
 
 Java 17, Spring Boot 3.5.16, Spring Cloud 2025.0.3 and checksum-pinned Gradle 8.14.3.
-The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Phase 5 adds transactional outboxes, versioned Kafka events, MongoDB notifications, consumer deduplication, retries and retained dead letters with explicit replay. Authentication remains a scaffold; JWT enforcement is Phase 6.
+The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Phase 5 adds transactional outboxes, versioned Kafka events, MongoDB notifications, consumer deduplication, retries and retained dead letters with explicit replay. Phase 6 validates Keycloak JWTs at gateway and backends, enforces roles/customer ownership, and authenticates internal service calls. See the security guide before running earlier-phase commands.
 
-Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md), [Phase 5 Kafka and Notification Service](docs/phase-5.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
+Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md), [Phase 5 Kafka and Notification Service](docs/phase-5.md), [Phase 6 Security](docs/phase-6.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
 
 ```mermaid
 flowchart LR
@@ -54,9 +54,33 @@ This activates the retained Java 17 toolchain, writable Gradle/Docker configurat
 ./gradlew --no-daemon :customer-service:test
 ```
 
-The Phase 5 build passed 95 tests with zero failures, errors or skips; see [executed verification](docs/phase-5-verification.md). Historical Phase 4 results remain in [its verification](docs/phase-4-verification.md).
+Current build results are in [Phase 6 verification](docs/phase-6-verification.md); earlier phase results are historical.
 
 Test reports: each module's `build/reports/tests/test/index.html`. Integration tests execute the real Flyway migration and Hibernate schema validation; they do not substitute H2 or silently skip when Docker is unavailable. Databases created by Testcontainers are disposable and unrelated to Compose data volumes. CI runs the same build using Java 17 and Docker on Ubuntu.
+
+## Start the secured Phase 6 development stack
+
+```bash
+source scripts/cloud-environment.sh  # cloud only
+# Generate .env once only if absent: python3 scripts/create-local-env.py
+python3 scripts/prepare-security-env.py
+./gradlew --no-daemon build
+docker compose up -d --wait --wait-timeout 240 keycloak
+python3 scripts/setup-keycloak.py
+docker compose build api-gateway auth-service customer-service account-service transaction-service notification-service
+docker compose up -d --wait --wait-timeout 300 api-gateway auth-service transaction-service notification-service
+docker compose restart api-gateway
+python3 scripts/security-smoke-test.py
+python3 scripts/events-smoke-test.py
+python3 scripts/transaction-smoke-test.py
+python3 scripts/run-authenticated-postman.py postman/events.postman_collection.json
+```
+
+This fourteen-container target uses real Keycloak Authorization Code + S256 PKCE login. JWT signature, issuer, audience, timestamps and subject are validated independently at the gateway and resource services. Customer ownership comes from an admin-controlled customer_id claim; headers and email cannot establish ownership. Staff can administer business records, customers can access their own resources, and Notification/replay are admin-only. Internal posting accepts only Transaction Service's client-credentials identity. See [the authorization matrix, identity binding and upgrade rules](docs/phase-6.md).
+
+The build passed 117 tests; the final audience edge case was rerun in the JWT and gateway suites. See [executed verification](docs/phase-6-verification.md).
+
+Security is always enabled. Earlier-phase commands below are historical smaller workflows: initialize Keycloak and generated security credentials first, rebuild the changed secured gateway/backends, and supply bearer tokens. Smoke scripts now log in privately or use BANK_ACCESS_TOKEN. Postman collections require accessToken; the authenticated runner supplies it without retaining token-bearing exports. Legacy unbound monetary idempotency keys return 409 to prevent ambiguous duplicate posting after the security upgrade.
 
 ## Start the Phase 5 event development stack
 
@@ -68,7 +92,7 @@ docker compose build customer-service account-service transaction-service notifi
 docker compose up -d --wait --wait-timeout 300 api-gateway transaction-service notification-service
 docker compose restart api-gateway
 python3 scripts/events-smoke-test.py
-npx --yes newman@6.2.1 run postman/events.postman_collection.json --delay-request 200
+python3 scripts/run-authenticated-postman.py postman/events.postman_collection.json
 ```
 
 This twelve-container target runs seven applications, four databases and Kafka. Business writes capture an event in their own database transaction; background relays publish without making Kafka availability a condition of accepting business writes. Notification Service stores each event ID once, commits offsets after durable storage, and quarantines invalid or exhausted events. Read `/api/notifications`; inspect `/api/notifications/dead-letters`; explicitly replay a retained record with POST `/api/notifications/dead-letters/{id}/replay`. Notification Swagger runs directly on port 8085. See [Phase 5](docs/phase-5.md) for contracts, partitioning, consumer groups and replay rules.
@@ -93,7 +117,7 @@ This nine-container target adds Transaction Service and its PostgreSQL database 
 The monetary smoke creates synthetic development accounts, exercises deposits/withdrawals/transfers and concurrent duplicate requests, checks reconciliation, drains its funds and leaves closed accounts with an inactive customer. Run only against development data. Optional Postman runner after gateway readiness:
 
 ```bash
-npx --yes newman@6.2.1 run postman/transactions.postman_collection.json --delay-request 200
+python3 scripts/run-authenticated-postman.py postman/transactions.postman_collection.json
 ```
 
 ## Start the Customer and Account development stack
@@ -128,6 +152,7 @@ python3 scripts/create-local-env.py  # once; refuses to overwrite an existing .e
 docker compose config --quiet
 docker compose --parallel 1 build
 docker compose --parallel 1 up -d --wait --wait-timeout 300
+python3 scripts/setup-keycloak.py
 python3 scripts/smoke-test.py
 python3 scripts/customer-smoke-test.py
 docker compose ps
@@ -207,14 +232,14 @@ JSON examples and error responses are in [Phase 2 docs](docs/phase-2.md). Swagge
 To execute the Customer Postman collection from the command line against the running gateway:
 
 ```bash
-npx --yes newman@6.2.1 run postman/customers.postman_collection.json
+python3 scripts/run-authenticated-postman.py postman/customers.postman_collection.json
 ```
 
 Node.js/npm are needed only for this optional runner. The collection contains 10 requests and 13 assertions, and leaves one inactive development customer.
 
 ## Foundation endpoints
 
-Services retain ports 8080 Gateway, 8081 Auth, 8082 Customer, 8083 Account, 8084 Transaction, 8085 Notification, 8888 Config and 8761 Eureka. All expose `/actuator/health`, `/actuator/health/readiness` and `/actuator/health/liveness`. Keycloak is on 8090 with a `banking` realm and ADMIN, CUSTOMER, BANK_EMPLOYEE roles; no customer users are imported. The public OIDC client uses Authorization Code + PKCE. Authentication enforcement is Phase 6.
+Services retain ports 8080 Gateway, 8081 Auth, 8082 Customer, 8083 Account, 8084 Transaction, 8085 Notification, 8888 Config and 8761 Eureka. All expose `/actuator/health`, `/actuator/health/readiness` and `/actuator/health/liveness`. Keycloak is on 8090 with a `banking` realm and ADMIN, CUSTOMER, BANK_EMPLOYEE roles; no customer users are imported. The public OIDC client uses Authorization Code + PKCE. Phase 6 now enforces bearer authentication, roles and customer ownership.
 
 The gateway strips only `/api` for Customer, Account and Transaction routes, preserving `/customers`, `/accounts`, `/transactions` and `/transfers`. Notification also preserves `/notifications`; Auth scaffold routes strip `/api/{service}`. `/api/customers/foundation` remains a compatible infrastructure probe. Customer account overview is available at `/api/customers/{id}/accounts` and returns a paginated response from Account Service; dependency errors return 503.
 
@@ -222,11 +247,11 @@ The gateway strips only `/api` for Customer, Account and Transaction routes, pre
 
 Prometheus, Grafana and Zipkin are optional infrastructure under the `monitoring` Compose profile. Metrics integration, dashboards, tracing and ELK remain Phase 7. Grafana uses a generated local admin password. Kafka is a local single-broker KRaft node; Phase 5 provisions five business topics and five dead-letter topics, each with three partitions. Production replication and monitoring remain future work.
 
-This foundation has no JWT/ownership enforcement and must use development data on local networks. Keycloak uses its development database for now. Kubernetes and deployment automation remain Phase 8. Phase 4 verifies atomic posting, balanced journals, idempotency, concurrent requests and failure recovery; real payment settlement and customer authorization are not connected.
+This development stack enforces JWTs and ownership. The imported realm uses loopback HTTP/start-dev; production IdP/network/secret hardening still needs a deployment-specific configuration. Keycloak uses its development database for now. Kubernetes and deployment automation remain Phase 8. Phase 4 verifies atomic posting, balanced journals, idempotency, concurrent requests and failure recovery; real payment settlement and customer authorization are not connected.
 
 The cloud Docker VFS driver duplicates image layers and has a 32 GB disk. The full Phase 1 stack left about 589 MB free. Prefer the twelve-container event target or the host-Java workflow for development and remove unused project containers before substantial builds or Testcontainers runs. Do not start heavy monitoring here without additional disk capacity; preserve data volumes and user-owned caches/images.
 
-Phase 5 records notifications and supports controlled replay. External email/SMS delivery and advanced fraud detection are not implemented; security is Phase 6.
+Phase 6 secures the existing workflows. External email/SMS delivery and advanced fraud detection are not implemented; observability is Phase 7.
 
 ## Historical Phase 2 verification
 
@@ -247,3 +272,7 @@ Phase 3 is developed on `feat/phase-3-account-service`, based on `feat/phase-2-c
 ## Phase 5 feature branch
 
 `feat/phase-5-kafka-integration` is based on `feat/phase-4-transaction-service`. See [design](docs/phase-5.md), [event schema](docs/events/bank-event-v1.schema.json), [Postman collection](postman/events.postman_collection.json) and [verification](docs/phase-5-verification.md). Host development defaults to Kafka `localhost:19092` and MongoDB `localhost:27018`; external endpoints use `KAFKA_BOOTSTRAP_SERVERS` and `NOTIFICATION_MONGO_URI`.
+
+## Phase 6 feature branch
+
+`feat/phase-6-security` is based on `feat/phase-5-kafka-integration`. See [security design and startup](docs/phase-6.md) and [verification](docs/phase-6-verification.md). Keycloak credentials remain private in ignored local configuration; no passwords or tokens are committed.

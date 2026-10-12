@@ -13,11 +13,11 @@ class AccountOverviewClientTest {
     @BeforeEach void setup() throws Exception {
         responseStatus=200;
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
-        server.createContext("/accounts/customer/1",exchange->{
+        server.createContext("/internal/v1/accounts/customer/1",exchange->{
             var bytes=payload.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type","application/json");exchange.sendResponseHeaders(responseStatus,bytes.length);
             exchange.getResponseBody().write(bytes);exchange.close();
-        });server.start();client=new AccountOverviewClient(RestClient.builder(),"http://127.0.0.1:"+server.getAddress().getPort());
+        });server.start();var tokens=org.mockito.Mockito.mock(com.bank.security.ServiceTokenProvider.class);org.mockito.Mockito.when(tokens.token()).thenReturn("fixture-service-token");client=new AccountOverviewClient(RestClient.builder(),"http://127.0.0.1:"+server.getAddress().getPort(),tokens);
     }
     @AfterEach void stop() {server.stop(0);}
     @Test void acceptsAValidPageOverHttp() {

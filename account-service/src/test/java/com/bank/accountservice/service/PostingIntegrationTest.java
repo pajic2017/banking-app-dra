@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.*;
 import static org.assertj.core.api.Assertions.*;
 
 @Testcontainers
+@org.springframework.context.annotation.Import({com.bank.security.SecurityConfiguration.class,com.bank.security.fixtures.SecurityTestConfiguration.class})
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
         "CONFIG_IMPORT=optional:classpath:/no-config-client.yml","bank.events.relay-enabled=false","spring.cloud.config.enabled=false","eureka.client.enabled=false"})
 class PostingIntegrationTest {
@@ -34,6 +35,8 @@ class PostingIntegrationTest {
     @Autowired AccountService lifecycle;
     @Autowired JdbcTemplate jdbc;
     @Autowired TestRestTemplate rest;
+    @BeforeEach void authenticatedRequests() { rest.getRestTemplate().setInterceptors(java.util.List.of((request,body,execution) -> { if(!request.getHeaders().containsKey("Authorization"))request.getHeaders().setBearerAuth("posting");return execution.execute(request,body); })); }
+
     @BeforeEach void reset() {
         jdbc.update("DELETE FROM ledger_entries"); jdbc.update("DELETE FROM posting_receipts"); accounts.deleteAllInBatch();
     }

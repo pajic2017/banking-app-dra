@@ -2,6 +2,7 @@
 """Verify three real outboxes and Kafka-to-Mongo notifications using synthetic development data."""
 import collections
 import json
+from local_oidc import admin_token
 import time
 import uuid
 import urllib.error
@@ -13,6 +14,7 @@ correlation = str(uuid.uuid4())
 
 def request(method, path, payload=None, key=None, expected=(200,)):
     headers = {'Content-Type': 'application/json', 'X-Correlation-ID': correlation}
+    headers['Authorization'] = 'Bearer '+admin_token()
     if key:
         headers['Idempotency-Key'] = key
     data = json.dumps(payload).encode() if payload is not None else None

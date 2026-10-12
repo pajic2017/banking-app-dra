@@ -12,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 
+@org.springframework.security.access.prepost.PreAuthorize("@access.staff()")
 @RestController
 @RequestMapping("/customers")
 @Validated
@@ -32,6 +33,7 @@ public class CustomerController {
         return ResponseEntity.created(location).body(customer);
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("@access.staff() or @access.customer(#id)")
     @GetMapping("/{id}")
     @Operation(summary = "Get a customer, including inactive customers")
     @ApiResponse(responseCode = "404", description = "Customer does not exist")
@@ -45,6 +47,7 @@ public class CustomerController {
         return service.list(page, size, status);
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("@access.staff() or @access.customer(#id)")
     @PutMapping("/{id}")
     @Operation(summary = "Update customer information without changing status")
     @ApiResponse(responseCode = "404", description = "Customer does not exist")

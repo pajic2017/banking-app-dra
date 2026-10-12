@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the live gateway/customer/account flow; retains closed synthetic accounts."""
 import json
+from local_oidc import admin_token
 import time
 import uuid
 import urllib.request
@@ -14,7 +15,7 @@ def request(method, path, payload=None, status=200):
     data = json.dumps(payload).encode() if payload is not None else None
     try:
         response = urllib.request.urlopen(urllib.request.Request(base + path, data=data, method=method,
-            headers={'Content-Type': 'application/json', 'Accept': 'application/json'}), timeout=10)
+            headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization':'Bearer '+admin_token()}), timeout=10)
     except urllib.error.HTTPError as error:
         response = error
     with response:

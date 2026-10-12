@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the durable customer lifecycle through the gateway; retains an inactive test record."""
 import json
+from local_oidc import admin_token
 import os
 import urllib.error
 import urllib.request
@@ -13,6 +14,7 @@ base = os.environ.get('CUSTOMER_API_BASE', 'http://localhost:8080/api/customers'
 def request(method, url, payload=None, expected=200):
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
+    headers['Authorization'] = 'Bearer '+admin_token()
     try:
         response = urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method), timeout=10)
     except urllib.error.HTTPError as error:

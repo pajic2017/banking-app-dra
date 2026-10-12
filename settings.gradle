@@ -1,3 +1,3 @@
 pluginManagement { repositories { mavenCentral(); gradlePluginPortal() } }
 rootProject.name = 'banking-microservices'
-include 'discovery-server', 'config-server', 'api-gateway', 'auth-service', 'customer-service', 'account-service', 'transaction-service', 'notification-service', 'common-contracts'
+include 'discovery-server', 'config-server', 'api-gateway', 'auth-service', 'customer-service', 'account-service', 'transaction-service', 'notification-service', 'common-contracts', 'security-support'

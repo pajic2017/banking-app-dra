@@ -3,6 +3,7 @@
 Preserves volumes and restores stopped services even when a check fails.
 """
 import json
+from local_oidc import admin_token
 import subprocess
 import time
 import uuid
@@ -21,6 +22,7 @@ def compose(*args, stdin=None, check=True):
 
 def request(method, url, body=None, correlation=None):
     headers = {'Content-Type': 'application/json'}
+    headers['Authorization'] = 'Bearer '+admin_token()
     if correlation:
         headers['X-Correlation-ID'] = correlation
     with urllib.request.urlopen(urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None,
