@@ -1,0 +1,54 @@
+server:
+  port: ${PORT:8085}
+spring:
+  application:
+    name: notification-service
+  data:
+    mongodb:
+      uri: ${NOTIFICATION_MONGO_URI:mongodb://localhost:27018/notifications?retryWrites=false&w=majority&journal=true&serverSelectionTimeoutMS=2000&connectTimeoutMS=2000&socketTimeoutMS=3000&wtimeoutMS=3000}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 3000
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 5000
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      properties:
+        max.poll.records: 20
+        max.poll.interval.ms: 300000
+  config:
+    import: "${CONFIG_IMPORT:configserver:${CONFIG_SERVER_URL:http://localhost:8888}}"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+
+---
+bank:
+  security:
+    issuer: ${KEYCLOAK_ISSUER:http://localhost:8090/realms/banking}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8090/realms/banking/protocol/openid-connect/certs}
+    token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8090/realms/banking/protocol/openid-connect/token}
+    audience: banking-api
+    client-secret: ${SERVICE_CLIENT_SECRET:}

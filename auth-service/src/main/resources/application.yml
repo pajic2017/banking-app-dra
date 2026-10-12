@@ -1,0 +1,32 @@
+server:
+  port: ${PORT:8081}
+spring:
+  application:
+    name: auth-service
+  config:
+    import: "${CONFIG_IMPORT:configserver:${CONFIG_SERVER_URL:http://localhost:8888}}"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+
+---
+bank:
+  security:
+    issuer: ${KEYCLOAK_ISSUER:http://localhost:8090/realms/banking}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8090/realms/banking/protocol/openid-connect/certs}
+    token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8090/realms/banking/protocol/openid-connect/token}
+    audience: banking-api
+    client-secret: ${SERVICE_CLIENT_SECRET:}

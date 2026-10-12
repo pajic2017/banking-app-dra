@@ -1,0 +1,62 @@
+server:
+  port: ${PORT:8082}
+spring:
+  application:
+    name: customer-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 3000
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 5000
+  config:
+    import: "${CONFIG_IMPORT:configserver:${CONFIG_SERVER_URL:http://localhost:8888}}"
+  datasource:
+    url: ${CUSTOMER_DB_URL:jdbc:mysql://localhost:3307/customers?connectionTimeZone=UTC}
+    username: ${CUSTOMER_DB_USER:customer}
+    password: ${CUSTOMER_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+bank:
+  events:
+    relay-enabled: ${BANK_EVENTS_RELAY_ENABLED:true}
+  account-service-url: ${ACCOUNT_SERVICE_URL:http://localhost:8083}
+# JSON is explicitly versioned, not Java type-header deserialization.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+
+---
+bank:
+  security:
+    issuer: ${KEYCLOAK_ISSUER:http://localhost:8090/realms/banking}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8090/realms/banking/protocol/openid-connect/certs}
+    token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8090/realms/banking/protocol/openid-connect/token}
+    audience: banking-api
+    client-secret: ${SERVICE_CLIENT_SECRET:}
