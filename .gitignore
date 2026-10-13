@@ -4,3 +4,9 @@
 .run/
 *.log
 __pycache__/
+
+# React generated dependencies, builds and browser artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/

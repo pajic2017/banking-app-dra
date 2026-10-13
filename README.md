@@ -1,13 +1,14 @@
-# Banking microservices — Phase 7
+# Banking microservices — Phase 8
 
 Java 17, Spring Boot 3.5.16, Spring Cloud 2025.0.3 and checksum-pinned Gradle 8.14.3.
-The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Phase 5 adds transactional outboxes, versioned Kafka events, MongoDB notifications, consumer deduplication, retries and retained dead letters with explicit replay. Phase 6 validates Keycloak JWTs at gateway and backends, enforces roles/customer ownership, and authenticates internal service calls. Phase 7 adds authenticated Prometheus scrapes, Grafana, OpenTelemetry/Zipkin tracing through durable workers and Kafka, ECS JSON logs and ELK. See the current guides before running earlier-phase commands.
+The foundation, Customer, Account and Transaction services are implemented. Phase 4 adds durable monetary requests, atomic balanced postings, idempotency, concurrency control and recovery. Phase 5 adds transactional outboxes, versioned Kafka events, MongoDB notifications, consumer deduplication, retries and retained dead letters with explicit replay. Phase 6 validates Keycloak JWTs at gateway and backends, enforces roles/customer ownership, and authenticates internal service calls. Phase 7 adds authenticated Prometheus scrapes, Grafana, OpenTelemetry/Zipkin tracing through durable workers and Kafka, ECS JSON logs and ELK. Phase 8 adds a React/TypeScript frontend with real S256 PKCE sign-in, role-aware customer/account workflows, asynchronous payments, transaction history and administrator event operations. See the current guides before running earlier-phase commands.
 
-Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md), [Phase 5 Kafka and Notification Service](docs/phase-5.md), [Phase 6 Security](docs/phase-6.md), [Phase 7 Observability](docs/phase-7.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
+Architecture and mentoring: [Phase 1](docs/phase-1.md), [Phase 2 Customer Service](docs/phase-2.md), [Phase 3 Account Service](docs/phase-3.md), [Phase 4 Transaction Service](docs/phase-4.md), [Phase 5 Kafka and Notification Service](docs/phase-5.md), [Phase 6 Security](docs/phase-6.md), [Phase 7 Observability](docs/phase-7.md), [Phase 8 React frontend](docs/phase-8.md). Historical foundation results: [Phase 1 verification](docs/verification.md).
 
 ```mermaid
 flowchart LR
-    Client --> Gateway[Gateway :8080]
+    Browser[React frontend :5173] -->|same-origin /api proxy| Gateway[Gateway :8080]
+    Browser -->|Authorization code + S256 PKCE| Keycloak[Keycloak :8090]
     Gateway --> Customer[Customer Service :8082]
     Customer --> MySQL[(Customer MySQL 8.4)]
     Customer --> Flyway[Versioned Flyway migrations]
@@ -32,6 +33,7 @@ flowchart LR
 ## Prerequisites
 
 * JDK 17, Python 3, Docker Engine and Compose v2.
+* Frontend: Node.js 22.12+ (Node 24 recommended) and npm. Install with `npm ci --prefix frontend`, validate with `npm test --prefix frontend` and `npm run build --prefix frontend`, then run `bash scripts/start-frontend.sh`. Read [Phase 8](docs/phase-8.md) for Keycloak reconciliation and browser tests.
 * Tests require Docker: Testcontainers starts disposable MySQL 8.4, PostgreSQL 17, Kafka 3.9.1 and MongoDB 8.0 containers. No `.env` or application database credentials are needed for tests.
 * Local application infrastructure uses random credentials in ignored `.env`. Generate once; never commit it.
 * Maven Central, Gradle distributions/plugin repositories, Docker Hub and Quay must be reachable.
@@ -262,11 +264,11 @@ The gateway strips only `/api` for Customer, Account and Transaction routes, pre
 
 Prometheus, Grafana and Zipkin are optional infrastructure under the `monitoring` Compose profile. Phase 7 now integrates metrics, dashboards, OpenTelemetry tracing and ELK. Grafana uses a generated local admin password. Kafka is a local single-broker KRaft node; Phase 5 provisions five business topics and five dead-letter topics, each with three partitions. Production replication and monitoring remain future work.
 
-This development stack enforces JWTs and ownership. The imported realm uses loopback HTTP/start-dev; production IdP/network/secret hardening still needs a deployment-specific configuration. Keycloak uses its development database for now. Kubernetes and deployment automation remain Phase 8. Phase 4 verifies atomic posting, balanced journals, idempotency, concurrent requests and failure recovery; real payment settlement and customer authorization are not connected.
+This development stack enforces JWTs and ownership. The imported realm uses loopback HTTP/start-dev; production IdP/network/secret hardening still needs a deployment-specific configuration. Keycloak uses its development database for now. Kubernetes and deployment automation remain future work; Phase 8 implements the requested React frontend. Phase 4 verifies atomic posting, balanced journals, idempotency, concurrent requests and failure recovery; external payment settlement is not connected; customer authorization is enforced in Phase 6.
 
 The cloud Docker VFS driver duplicates image layers and has a 32 GB disk. The full Phase 1 stack left about 589 MB free. Prefer the twelve-container event target or the host-Java workflow for development and remove unused project containers before substantial builds or Testcontainers runs. Do not start heavy monitoring here without additional disk capacity; preserve data volumes and user-owned caches/images.
 
-Phase 6 secures the existing workflows. External email/SMS delivery and advanced fraud detection are not implemented; observability is implemented in Phase 7; deployment is Phase 8.
+Phase 6 secures the existing workflows. External email/SMS delivery and advanced fraud detection are not implemented; observability is implemented in Phase 7; the requested React frontend is implemented in Phase 8; deployment remains future work.
 
 ## Historical Phase 2 verification
 
